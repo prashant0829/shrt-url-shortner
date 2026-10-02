@@ -1,0 +1,16 @@
+node_modules/
+coverage/
+dist/
+# The React build, written by `npm run build` and served by the API.
+server/public/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+
+# Archify agent skill (third-party, installed for this project only) and the diagrams it generates.
+# To keep a finished diagram in the repo, copy it into docs/.
+.claude/skills/archify/
+skills-lock.json
+.archify/

@@ -1,0 +1,120 @@
+name: url-shortener
+
+# Local development (app on the host):  docker compose up -d --wait postgres redis
+# Full production-like stack:           docker compose up --build
+
+x-app: &app
+  build: .
+  restart: unless-stopped
+  environment: &app-env
+    NODE_ENV: production
+    LOG_LEVEL: info
+    BASE_URL: ${BASE_URL:-http://localhost:8080}
+    # nginx is the only proxy in front of the API: trust exactly one hop of X-Forwarded-For.
+    TRUST_PROXY_HOPS: '1'
+    DATABASE_URL: postgres://shortener:shortener@postgres:5432/urlshortener
+    REDIS_URL: redis://redis:6379/0
+    JWT_SECRET: ${JWT_SECRET:-change-me-in-real-deployments-0123456789abcdef}
+    VISITOR_HASH_SECRET: ${VISITOR_HASH_SECRET:-change-me-visitor-hash-secret}
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    migrate: { condition: service_completed_successfully }
+  init: true
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shortener
+      POSTGRES_PASSWORD: shortener
+      POSTGRES_DB: urlshortener
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U shortener -d urlshortener']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # AOF keeps queued click events across restarts. volatile-lru only evicts keys that carry a TTL
+    # (link cache, rate-limit counters), so the click stream itself is never evicted.
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - volatile-lru
+    ports:
+      - '6379:6379'
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-shot job: applies pending SQL migrations, then exits.
+  migrate:
+    build: .
+    command: ['node', 'src/infra/migrate-cli.js']
+    environment:
+      DATABASE_URL: postgres://shortener:shortener@postgres:5432/urlshortener
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: 'no'
+
+  # Two stateless API replicas: scale horizontally by adding more of these.
+  api-1:
+    <<: *app
+    healthcheck: &api-healthcheck
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8080/health/live']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+  api-2:
+    <<: *app
+    healthcheck: *api-healthcheck
+
+  # Consumes the click stream and batch-inserts into Postgres. It has no HTTP server, so its health
+  # is a heartbeat file that the consume loop touches after every successful poll.
+  worker:
+    <<: *app
+    command: ['node', 'src/worker.js']
+    environment:
+      <<: *app-env
+      WORKER_HEARTBEAT_FILE: /tmp/worker.heartbeat
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          process.exit(Date.now() - require('fs').statSync('/tmp/worker.heartbeat').mtimeMs < 60000 ? 0 : 1)
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  nginx:
+    build: ./nginx
+    restart: unless-stopped
+    ports:
+      - '8080:80'
+    depends_on:
+      api-1: { condition: service_healthy }
+      api-2: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  redisdata:

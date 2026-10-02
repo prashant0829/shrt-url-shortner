@@ -1,0 +1,14 @@
+**/node_modules
+**/coverage
+**/dist
+server/public
+server/test
+server/scripts
+.git
+.github
+docs
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+**/.DS_Store
