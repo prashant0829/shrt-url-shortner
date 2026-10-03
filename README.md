@@ -1,59 +1,135 @@
-# shrt — a production-grade URL shortener
+<div align="center">
 
-A horizontally scalable URL shortener with click analytics: a **React** single page app, an **Express** API, **PostgreSQL** and **Redis** — all in plain **JavaScript**. It is built the way a real service would be: a cache-first redirect path, asynchronous click processing, rate limiting, observability, containerised deployment and a serious automated test suite.
+<img src="docs/banner.svg" alt="shrt turns a long URL into a short link that redirects back to it" width="100%" />
 
-|                                            Dashboard                                             |                                                            Analytics                                                             |
-| :----------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------------------: |
-| ![Dashboard listing links with status, click counts and actions](docs/screenshots/dashboard.png) | ![Analytics dialog with a clicks chart and country, browser, OS, device and referrer breakdowns](docs/screenshots/analytics.png) |
+# shrt
 
-> 📖 **New to Docker, nginx or Redis?** Read the illustrated beginner's guide: [How it works](docs/HOW-IT-WORKS.md). There is also an interactive [architecture diagram](docs/architecture-flow.html) (open the file in a browser after you clone the project).
+**A production-grade URL shortener with click analytics**
 
-**Just want to see it running?** Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and run:
+A **React** single page app, an **Express** API, **PostgreSQL** and **Redis**, all in plain **JavaScript**.<br />
+Cache-first redirects · asynchronous click tracking · rate limiting · observability · Docker · a serious test suite
+
+<br />
+
+![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A522.12-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)
+![Express](https://img.shields.io/badge/Express-5-000000?style=flat-square&logo=express&logoColor=white)
+![React](https://img.shields.io/badge/React-19-20232A?style=flat-square&logo=react&logoColor=61DAFB)
+![Vite](https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&logo=vite&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white)
+![nginx](https://img.shields.io/badge/nginx-1.27-009639?style=flat-square&logo=nginx&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)
+
+<br />
+
+<img src="docs/screenshots/dashboard.png" alt="Dashboard listing links with status, click counts and actions" width="49%" />
+<img src="docs/screenshots/analytics.png" alt="Analytics dialog with a clicks chart and country, browser, OS, device and referrer breakdowns" width="49%" />
+
+<sub>Your links with status and click counts &nbsp;·&nbsp; Analytics: clicks over time and breakdowns</sub>
+
+</div>
+
+## Quick start
+
+You only need [Docker Desktop](https://www.docker.com/products/docker-desktop/):
 
 ```bash
 git clone https://github.com/prashant0829/shrt-url-shortner.git
 cd shrt-url-shortner
-docker compose up --build -d --wait    # the first run takes a few minutes: it downloads images and builds the app
+docker compose up --build -d --wait    # first run: a few minutes
 ```
 
-Then open <http://localhost:8080>. Development mode, debugging and troubleshooting are in [Getting started](#getting-started).
+Then open **<http://localhost:8080>**. The app, the API with its docs (<http://localhost:8080/docs>), two API replicas behind nginx, the click worker, PostgreSQL and Redis are now running.
 
-**Contents:** [Features](#features) · [Architecture](#architecture) · [Tech stack](#tech-stack) · [Getting started](#getting-started) · [Command reference](#command-reference) · [Debugging](#debugging) · [Troubleshooting](#troubleshooting) · [API overview](#api-overview) · [Configuration](#configuration) · [Design decisions](#design-decisions-and-trade-offs) · [Testing](#testing) · [Performance](#performance) · [Scaling further](#scaling-further) · [Project layout](#project-layout) · [Working on the code](#working-on-the-code) · [Known limitations](#known-limitations)
+> [!TIP]
+> **New to Docker, nginx or Redis?** Read the illustrated beginner's guide: [How it works](docs/HOW-IT-WORKS.md). There is also an interactive [architecture diagram](docs/architecture-flow.html) (open the file in a browser after you clone the project).
+
+### Where to go
+
+| I want to…                       | Go to                                                                                                     |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 🚀 Run it and click around       | [Getting started](#getting-started) · [First steps](#first-steps)                                         |
+| 💻 Develop with hot reload       | [Development mode](#option-b-development-mode) · [Command reference](#command-reference)                  |
+| 🐞 Find out why something breaks | [Debugging](#debugging) · [Troubleshooting](#troubleshooting)                                             |
+| 🧭 Understand how it works       | [Architecture](#architecture) · [How it works](docs/HOW-IT-WORKS.md) (beginner's guide)                   |
+| 🧠 Read the design decisions     | [Design decisions and trade-offs](#design-decisions-and-trade-offs) · [Scaling further](#scaling-further) |
+| 🛠️ Change or extend the code     | [Working on the code](#working-on-the-code) · [Project layout](#project-layout)                           |
+| 🔌 Use the API                   | [API overview](#api-overview) · [Configuration](#configuration)                                           |
+
+<details>
+<summary><b>📑 Full table of contents</b></summary>
+
+- [Quick start](#quick-start)
+  - [Where to go](#where-to-go)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Tech stack](#tech-stack)
+- [Getting started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Get the code](#get-the-code)
+  - [Option A: everything in Docker](#option-a-everything-in-docker)
+  - [Option B: development mode](#option-b-development-mode)
+  - [First steps](#first-steps)
+  - [Stopping and resetting](#stopping-and-resetting)
+  - [Before you share it with anyone](#before-you-share-it-with-anyone)
+- [Command reference](#command-reference)
+  - [npm scripts](#npm-scripts)
+  - [Docker Compose cheat sheet](#docker-compose-cheat-sheet)
+- [Debugging](#debugging)
+  - [Is it healthy?](#is-it-healthy)
+  - [Read the logs](#read-the-logs)
+  - [Follow one request](#follow-one-request)
+  - [Look inside PostgreSQL](#look-inside-postgresql)
+  - [Look inside Redis](#look-inside-redis)
+  - [Read the metrics](#read-the-metrics)
+  - [Step through the code with a debugger](#step-through-the-code-with-a-debugger)
+  - [Run or debug one test](#run-or-debug-one-test)
+- [Troubleshooting](#troubleshooting)
+  - [Docker and ports](#docker-and-ports)
+  - [Setup and configuration](#setup-and-configuration)
+  - [The app behaves oddly](#the-app-behaves-oddly)
+- [API overview](#api-overview)
+- [Configuration](#configuration)
+- [Design decisions and trade-offs](#design-decisions-and-trade-offs)
+- [Testing](#testing)
+- [Performance](#performance)
+- [Scaling further](#scaling-further)
+- [Project layout](#project-layout)
+- [Working on the code](#working-on-the-code)
+  - [Where things go](#where-things-go)
+  - [Adding an endpoint, step by step](#adding-an-endpoint-step-by-step)
+- [Known limitations](#known-limitations)
+
+</details>
 
 ## Features
 
-- **Short links** — generated 7-character base62 codes or custom aliases, optional expiry, enable/disable, soft delete (a deleted code is never reused), edit destination, QR codes (PNG/SVG).
-- **Accounts** — register/login with scrypt-hashed passwords and short-lived JWTs; anonymous link creation is allowed with a stricter rate limit.
-- **Click analytics** — clicks over time (hourly/daily, empty buckets filled), unique visitors, countries, browsers, operating systems, devices and referrers. Bots are detected and excluded by default.
-- **Fast redirects** — Redis cache-aside with negative caching and request coalescing; Postgres is only touched on a cache miss.
-- **Asynchronous ingestion** — a redirect only appends an event to a Redis Stream; a separate worker batch-inserts into Postgres with idempotent writes.
-- **Safe by default** — destination validation (no private/loopback/metadata addresses, no credentials in URLs, no redirect loops), per-IP/per-user rate limiting, strict security headers, no stack traces in errors, raw IPs never stored.
-- **Operable** — structured JSON logs with request ids, Prometheus metrics, liveness/readiness probes, graceful shutdown, and an **OpenAPI 3.1** document generated from the same schemas that validate requests (Swagger UI at `/docs`).
-- **React UI** — sign up, create links, search and manage them, and explore analytics with a chart; accessible (native dialogs, labelled controls, live regions) and XSS-safe by construction.
+- 🔗 **Short links**: 7-character base62 codes or your own alias, optional expiry, enable/disable, soft delete (a deleted code is never reused), edit the destination, QR codes (PNG/SVG).
+- 👤 **Accounts**: sign up and log in (scrypt-hashed passwords, short-lived JWTs). Anonymous links work too, with a stricter rate limit.
+- 📊 **Click analytics**: clicks over time (hourly or daily), unique visitors, countries, browsers, operating systems, devices and referrers. Bots are detected and hidden by default.
+- ⚡ **Fast redirects**: Redis cache first, with negative caching and request coalescing. PostgreSQL is only touched on a cache miss.
+- 📨 **Asynchronous click tracking**: a redirect only drops an event on a Redis Stream; a separate worker stores events in batches with idempotent writes.
+- 🛡️ **Safe by default**: destination checks (no private, loopback or metadata addresses, no credentials in URLs, no redirect loops), rate limits per IP and per user, strict security headers, no stack traces in errors, raw IPs never stored.
+- 🔭 **Operable**: JSON logs with request ids, Prometheus metrics, liveness and readiness probes, graceful shutdown, and an **OpenAPI 3.1** document generated from the same schemas that validate requests (Swagger UI at `/docs`).
+- 🖥️ **React UI**: sign up, create and search links, explore analytics with a chart. Accessible (native dialogs, labelled controls, live regions) and XSS-safe by construction.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    C([Browser / API client]) --> N[nginx]
-    N --> A1[Express API 1<br/>+ React bundle]
-    N --> A2[Express API 2<br/>+ React bundle]
-    A1 & A2 <-->|"link cache, rate limits"| R[("Redis")]
-    A1 & A2 -->|"XADD click event"| R
-    A1 & A2 <-->|"cache miss, link CRUD, reports"| P[("PostgreSQL")]
-    W[Click worker] -->|"XREADGROUP + XACK"| R
-    W -->|"batch INSERT (idempotent)"| P
-```
+<p align="center">
+  <img src="docs/architecture.svg" alt="A browser calls nginx, which load balances two stateless Express API replicas. The API uses Redis for the link cache, rate limits and the click stream, and PostgreSQL on a cache miss. A click worker reads the stream and stores clicks in PostgreSQL." width="100%" />
+</p>
 
-**Redirect (the hot path)** — `GET /:code`
+**Redirect: the hot path** (`GET /:code`)
 
-1. Validate the code shape (junk is rejected without touching any store).
-2. Look up `link:{code}` in Redis. On a miss, one Postgres query (collapsed across concurrent requests) repopulates the cache — also for _unknown_ codes, briefly, so scanning random codes never reaches the database.
-3. Answer `302`, and fire-and-forget an event onto the stream. Analytics can never slow down or break a redirect.
+1. Check the shape of the code. Junk is rejected without touching any store.
+2. Look up `link:{code}` in Redis. On a miss, one PostgreSQL query (shared by all concurrent requests) refills the cache, also for _unknown_ codes for a short while, so scanning random codes never reaches the database.
+3. Answer `302` and fire-and-forget an event onto the stream. Analytics can never slow down or break a redirect.
 
-**Click pipeline** — worker loop: read a batch → enrich (browser/OS/device/bot) → **one** `INSERT … ON CONFLICT DO NOTHING` that also bumps the link counter → `XACK`. Delivery is at-least-once; the unique event id makes the effect exactly-once.
+**Click pipeline: the worker loop**
 
-**Layering** — a request travels through folders that match its layers: `routes/` declare the endpoint (URL, security, docs), `middleware/` handles auth, rate limits and validation, `controllers/` turn the HTTP request into a service call, `services/` hold the business rules, and `repositories/` and `cache/` are the only code that talks to PostgreSQL and Redis. Everything is a plain function: each service is a factory (`createLinkService({ links, cache, urlPolicy })`) that receives its collaborators as arguments and returns an object of functions, and all of them are wired together in one place ([`server/src/dependencies.js`](server/src/dependencies.js)), so the same code runs against in-memory fakes in unit tests and real infrastructure in integration tests.
+Read a batch → enrich (browser, OS, device, bot) → **one** `INSERT … ON CONFLICT DO NOTHING` that also bumps the link counter → `XACK`. Delivery is at-least-once; the unique event id makes the effect exactly-once.
+
+**Layering.** Code is organised in layers (routes → middleware → controllers → services → repositories and cache), and every piece is a plain function. See [Working on the code](#working-on-the-code).
 
 ## Tech stack
 
@@ -70,18 +146,21 @@ flowchart LR
 
 ## Getting started
 
-There are two ways to run the project. **Docker mode** needs nothing but Docker. **Development mode** runs the Node programs on your machine (instant reload, easy debugging) and keeps only the databases in Docker.
+There are two ways to run the project. Both start from the same clone.
+
+|                         | 🐳 Docker mode                                                     | 💻 Development mode                                        |
+| ----------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| **Best for**            | Trying it out and demos                                            | Changing code and debugging                                |
+| **You need**            | Docker                                                             | Docker and Node.js 22.12+                                  |
+| **What runs where**     | Everything in containers: nginx, 2 API replicas, worker, databases | Databases in Docker; API, worker and React on your machine |
+| **After a code change** | Rebuild: `docker compose up --build -d --wait`                     | Automatic reload                                           |
+| **Open**                | <http://localhost:8080>                                            | <http://localhost:5173>                                    |
 
 ### Prerequisites
 
-| You need                                                                                                                                                          | Why                                                                | How to check                                                            |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| **Docker** with Compose v2 ([Docker Desktop](https://www.docker.com/products/docker-desktop/) on Mac and Windows, Docker Engine plus the Compose plugin on Linux) | Runs PostgreSQL and Redis and, in Docker mode, the whole app       | `docker --version` · `docker compose version` · `docker info`           |
-| **Node.js 22.12 or newer** (24 recommended) with npm                                                                                                              | Development mode and running the tests. Not needed for Docker mode | `node -v` · `npm -v`                                                    |
-| **Free ports** 8080 (the app), 5432 (PostgreSQL), 6379 (Redis) and, in development mode, 5173 (React dev server)                                                  | The services listen on them                                        | `lsof -nP -iTCP:8080 -sTCP:LISTEN` prints nothing when the port is free |
-
-- If `docker info` says it cannot connect to the Docker daemon, start Docker Desktop and wait until it reports that it is running.
-- `nvm use` (or `fnm use`) picks Node 24 from [`.nvmrc`](.nvmrc).
+- **Docker** with Compose v2: [Docker Desktop](https://www.docker.com/products/docker-desktop/) on Mac and Windows, Docker Engine plus the Compose plugin on Linux. Needed for both modes. Check with `docker --version`, `docker compose version` and `docker info`. If `docker info` says it cannot connect to the Docker daemon, start Docker Desktop and wait until it reports that it is running.
+- **Node.js and npm**: Node 22.12 or newer (24 recommended). Only needed for development mode and the tests. Check with `node -v` and `npm -v`. `nvm use` (or `fnm use`) picks Node 24 from [`.nvmrc`](.nvmrc).
+- **Free ports**: 8080 (the app), 5432 (PostgreSQL), 6379 (Redis) and, in development mode, 5173 (React dev server). `lsof -nP -iTCP:8080 -sTCP:LISTEN` prints nothing when a port is free.
 - You do **not** need to install PostgreSQL, Redis, `psql` or `redis-cli`. They run inside Docker, and [Debugging](#debugging) shows how to use them from there.
 - Plan for about 1–2 GB of disk (images and build cache) and roughly 750 MB of RAM while the stack is idle (measured on a Mac).
 
@@ -100,7 +179,14 @@ Run every command in this guide from this folder (the one that contains `docker-
 docker compose up --build -d --wait
 ```
 
-What happens, in order: Docker builds one image (it compiles the React app and installs the server's packages), starts PostgreSQL and Redis, runs the one-off **migrate** job that creates the tables, then starts two API replicas, the click **worker** and **nginx**, and waits until all of them report healthy. `--build` rebuilds what changed, `-d` gives you your terminal back, `--wait` blocks until everything is healthy. The first run takes a few minutes because it downloads base images; later runs take seconds.
+What happens, in order:
+
+1. Docker builds one image: it compiles the React app and installs the server's packages.
+2. PostgreSQL and Redis start.
+3. The one-off **migrate** job creates the tables.
+4. Two API replicas, the click **worker** and **nginx** start, and Docker waits until all of them report healthy.
+
+`--build` rebuilds what changed, `-d` gives you your terminal back, `--wait` blocks until everything is healthy. The first run takes a few minutes because it downloads base images; later runs take seconds.
 
 Check that it works:
 
@@ -128,6 +214,7 @@ The `migrate` job is not listed because it ran once and finished (`docker compos
 - <http://localhost:8080> for the app
 - <http://localhost:8080/docs> for the interactive API documentation (Swagger UI)
 
+> [!NOTE]
 > **Code changes need a rebuild in this mode.** The containers run the code that was copied into the image when it was built. After you edit files, run the same `docker compose up --build -d --wait` again.
 
 ### Option B: development mode
@@ -137,8 +224,8 @@ First-time setup (once):
 ```bash
 npm run install:all                  # installs the dependencies of the root, server and client
 cp server/.env.example server/.env   # your settings file; the defaults are fine for local work
-npm run infra:up                     # starts PostgreSQL and Redis in Docker and waits until healthy
-npm run migrate                      # creates the tables ("Database is up to date" = nothing left to do)
+npm run infra:up                     # starts PostgreSQL and Redis in Docker
+npm run migrate                      # creates the tables ("Database is up to date" = done)
 ```
 
 Then start the three programs, each in its own terminal and from the project folder:
@@ -151,19 +238,23 @@ Then start the three programs, each in its own terminal and from the project fol
 
 Open <http://localhost:5173>. (The API on port 8080 only serves the web page after `npm run build`; that is how production works.) Stop a program with `Ctrl+C`. The databases keep running until you run `npm run infra:down`.
 
+> [!WARNING]
 > **Run one mode at a time.** Both modes use port 8080, so stop the Docker stack (`docker compose down`) before `npm run dev:api`, otherwise it fails with `EADDRINUSE`. `docker compose down` also stops the databases, so run `npm run infra:up` again afterwards. Both modes use the same PostgreSQL and Redis containers, so your links are shared, but you are signed out when you switch because each mode signs login tokens with a different `JWT_SECRET`.
 
 ### First steps
 
 **In the browser.** Choose **Sign up** and create an account (any email address, a password of at least 8 characters). Under **Shorten a link**, paste a long URL such as `https://example.com/some/very/long/path` and press **Shorten**. Open the short link, then open **Analytics** for that link. The click shows up after a few seconds, because the worker processes clicks in small batches.
 
-**From the terminal.** An anonymous link needs no account:
+<details>
+<summary><b>💻 Try the API with curl</b>: anonymous links, accounts, analytics</summary>
+
+An anonymous link needs no account:
 
 ```bash
 curl -s -X POST localhost:8080/api/v1/links -H 'content-type: application/json' \
   -d '{"url":"https://example.com/some/very/long/path"}'
 # => {"code":"aB3xY9k","shortUrl":"http://localhost:8080/aB3xY9k", ...}
-curl -i localhost:8080/aB3xY9k          # use the "code" from your response: 302 Found, Location: https://example.com/...
+curl -i localhost:8080/aB3xY9k          # use your own "code": 302 Found + Location header
 ```
 
 With an account you can list your links and read their analytics. `jq` is a small tool that prints JSON nicely (`brew install jq` or `apt install jq`); without it, leave off `| jq` and copy the token from the response by hand.
@@ -177,31 +268,37 @@ TOKEN=$(curl -s -X POST localhost:8080/api/v1/auth/login -H 'content-type: appli
 
 # Create a link you own, with your own short name
 curl -s -X POST localhost:8080/api/v1/links -H "authorization: Bearer $TOKEN" \
-  -H 'content-type: application/json' -d '{"url":"https://example.com/docs","customAlias":"my-docs"}'
+  -H 'content-type: application/json' \
+  -d '{"url":"https://example.com/docs","customAlias":"my-docs"}'
 
 # List your links, then read the analytics of one of them
 curl -s localhost:8080/api/v1/links -H "authorization: Bearer $TOKEN" | jq
-curl -s localhost:8080/api/v1/links/my-docs/analytics -H "authorization: Bearer $TOKEN" | jq .totals
+curl -s localhost:8080/api/v1/links/my-docs/analytics \
+  -H "authorization: Bearer $TOKEN" | jq .totals
 ```
 
+> [!NOTE]
 > **Clicks from `curl` are counted as bots.** Tools without a browser's `User-Agent` are classified as bots, and the default analytics view hides bots. Add `?includeBots=true` to the analytics URL to see them, or open the link in a browser.
+
+</details>
 
 Want a busy-looking chart? Queue fake clicks for a link that exists. The script runs on your machine, so run the setup steps of Option B first (`npm run install:all` and `cp server/.env.example server/.env`). A worker, in Docker or in terminal 2, then turns the clicks into analytics a few seconds later:
 
 ```bash
-npm --prefix server run seed:clicks -- my-docs 500 14     # 500 clicks spread over the last 14 days
+npm --prefix server run seed:clicks -- my-docs 500 14   # 500 clicks over the last 14 days
 ```
 
 ### Stopping and resetting
 
 ```bash
-docker compose stop        # pause everything; containers and data stay (resume with: docker compose start)
-docker compose down        # remove the containers; your links and users stay in Docker volumes
-docker compose down -v     # remove the containers AND the volumes: deletes all links, users and clicks
+docker compose stop        # pause everything, keep data (resume: docker compose start)
+docker compose down        # remove the containers; links and users stay in Docker volumes
+docker compose down -v     # remove containers AND volumes: deletes all data
 ```
 
 `npm run infra:down` is the same as `docker compose down`.
 
+> [!CAUTION]
 > **`down -v` cannot be undone.** Use it only when you want a completely fresh start.
 
 ### Before you share it with anyone
@@ -217,9 +314,12 @@ docker compose up -d --wait
 
 `BASE_URL` is the public address used to build short links. HTTPS is not included: put the stack behind something that terminates TLS.
 
-### Windows
+<details>
+<summary><b>🪟 Windows notes</b> (not tested on Windows)</summary>
 
 The commands in this guide are written for macOS and Linux and have not been tested on Windows. The least surprising route is **WSL 2**: install Ubuntu through WSL, turn on Docker Desktop's WSL integration, then clone the project and run every command in the Ubuntu terminal. In PowerShell, use `copy server\.env.example server\.env` instead of `cp`, `curl.exe` instead of `curl` (in Windows PowerShell, `curl` is an alias of another command), set variables with `$env:PORT = 8090` before the command, and end continued lines with a backtick instead of `\`.
+
+</details>
 
 ## Command reference
 
@@ -273,14 +373,24 @@ Scripts that live in one half of the project run with `npm --prefix server run <
 
 ## Debugging
 
+Start from the question you have:
+
+| I want to know…               | Look at                                                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| whether everything is up      | [Is it healthy?](#is-it-healthy)                                                                                         |
+| what the app did              | [Read the logs](#read-the-logs) · [Follow one request](#follow-one-request)                                              |
+| what is stored                | [PostgreSQL](#look-inside-postgresql) · [Redis](#look-inside-redis)                                                      |
+| how busy it is                | [Metrics](#read-the-metrics)                                                                                             |
+| why the code behaves that way | [Step through with a debugger](#step-through-the-code-with-a-debugger) · [Run or debug one test](#run-or-debug-one-test) |
+
 The `docker compose` commands below work in both modes, because the databases always run in Docker. For logs, the difference is: in Docker mode read them with `docker compose logs`; in development mode each program prints its own logs in the terminal where you started it.
 
 ### Is it healthy?
 
 ```bash
-docker compose ps                        # every service "healthy" (the expected list is in Getting started)
-curl -s localhost:8080/health/live       # {"status":"ok"}: the process is up
-curl -s localhost:8080/health/ready      # {"status":"ok","checks":{"postgres":"up","redis":"up"}}
+docker compose ps                     # every service "healthy" (see Getting started)
+curl -s localhost:8080/health/live    # {"status":"ok"}: the process is up
+curl -s localhost:8080/health/ready   # {"status":"ok","checks":{"postgres":"up","redis":"up"}}
 ```
 
 `ready` also checks PostgreSQL and Redis and answers `503` when one of them is down. `live` stays `200`, because restarting the app would not fix a broken database.
@@ -288,7 +398,7 @@ curl -s localhost:8080/health/ready      # {"status":"ok","checks":{"postgres":"
 ### Read the logs
 
 ```bash
-docker compose logs -f api-1 api-2 worker        # follow live (Ctrl+C stops following, not the services)
+docker compose logs -f api-1 api-2 worker        # follow live (Ctrl+C stops following only)
 docker compose logs --tail 50 --since 10m api-1  # the last 50 lines from the past 10 minutes
 docker compose logs migrate                      # what the one-off migration job did
 ```
@@ -300,7 +410,8 @@ In Docker mode the API writes one JSON object per line, which is easy for tools 
 docker compose logs -f --no-log-prefix api-1 | server/node_modules/.bin/pino-pretty
 
 # One short line per request (needs jq)
-docker compose logs -f --no-log-prefix api-1 | jq -R -r 'fromjson? | select(.req) | "\(.res.statusCode) \(.req.method) \(.req.url) \(.responseTime)ms"'
+docker compose logs -f --no-log-prefix api-1 | jq -R -r \
+  'fromjson? | select(.req) | "\(.res.statusCode) \(.req.method) \(.req.url) \(.responseTime)ms"'
 ```
 
 In development mode the logs are already coloured and readable. `LOG_LEVEL` in `server/.env` controls how much you see: `debug` (the default there), `trace` for more, `warn` for less.
@@ -310,8 +421,11 @@ In development mode the logs are already coloured and readable. `LOG_LEVEL` in `
 Every response has an `x-request-id` header, and every log line about that request carries the same id (`req.id`). Errors repeat it as `requestId`. nginx creates the id, or keeps the one you send, so you can choose your own:
 
 ```bash
-curl -s -H 'x-request-id: debug-1' localhost:8080/api/v1/auth/me      # letters, digits, . _ - are allowed
-docker compose logs api-1 api-2 | grep debug-1                        # the log line(s) of exactly that request
+# you pick the id: letters, digits, . _ - are allowed
+curl -s -H 'x-request-id: debug-1' localhost:8080/api/v1/auth/me
+
+# the log line(s) of exactly that request
+docker compose logs api-1 api-2 | grep debug-1
 ```
 
 When someone reports an error, ask for the `requestId` in the error body and search the logs for it.
@@ -325,9 +439,14 @@ docker compose exec postgres psql -U shortener -d urlshortener
 Inside `psql`, `\dt` lists the tables (`users`, `links`, `clicks`, `schema_migrations`), `\d links` describes one, and `\q` quits. Handy one-liners that need no interactive session:
 
 ```bash
-docker compose exec postgres psql -U shortener -d urlshortener -c "SELECT code, original_url, click_count, is_active FROM links ORDER BY id DESC LIMIT 5;"
-docker compose exec postgres psql -U shortener -d urlshortener -c "SELECT link_id, count(*) AS clicks FROM clicks GROUP BY link_id;"
-docker compose exec postgres psql -U shortener -d urlshortener -c "SELECT name FROM schema_migrations ORDER BY name;"
+docker compose exec postgres psql -U shortener -d urlshortener \
+  -c "SELECT code, original_url, click_count, is_active FROM links ORDER BY id DESC LIMIT 5;"
+
+docker compose exec postgres psql -U shortener -d urlshortener \
+  -c "SELECT link_id, count(*) AS clicks FROM clicks GROUP BY link_id;"
+
+docker compose exec postgres psql -U shortener -d urlshortener \
+  -c "SELECT name FROM schema_migrations ORDER BY name;"
 ```
 
 A graphical client (TablePlus, DBeaver, pgAdmin) works too: host `localhost`, port `5432`, user `shortener`, password `shortener`, database `urlshortener`.
@@ -335,22 +454,35 @@ A graphical client (TablePlus, DBeaver, pgAdmin) works too: host `localhost`, po
 ### Look inside Redis
 
 ```bash
-docker compose exec redis redis-cli                               # interactive session
-docker compose exec redis redis-cli XLEN clicks                   # click events still waiting for the worker (0 = nothing waiting)
-docker compose exec redis redis-cli XINFO GROUPS clicks           # the worker's group: "pending" and "lag" should be 0
-docker compose exec redis redis-cli --scan --pattern 'link:*'     # links currently cached
-docker compose exec redis redis-cli TTL link:my-docs              # seconds until that cache entry expires (-2 = not cached)
-docker compose exec redis redis-cli --scan --pattern 'rl:*'       # rate-limit counters
+# interactive session
+docker compose exec redis redis-cli
+
+# click events still waiting for the worker (0 = nothing waiting)
+docker compose exec redis redis-cli XLEN clicks
+
+# the worker's group: "pending" and "lag" should be 0
+docker compose exec redis redis-cli XINFO GROUPS clicks
+
+# links currently cached
+docker compose exec redis redis-cli --scan --pattern 'link:*'
+
+# seconds until that cache entry expires (-2 = not cached)
+docker compose exec redis redis-cli TTL link:my-docs
+
+# rate-limit counters
+docker compose exec redis redis-cli --scan --pattern 'rl:*'
 ```
 
-Avoid `FLUSHALL` on a running stack: it also deletes the queue of clicks that have not been processed yet.
+> [!WARNING]
+> Avoid `FLUSHALL` on a running stack: it also deletes the queue of clicks that have not been processed yet.
 
 ### Read the metrics
 
 `/metrics` (Prometheus format) is blocked at the nginx edge, so read it from inside a container:
 
 ```bash
-docker compose exec api-1 wget -qO- http://127.0.0.1:8080/metrics | grep -E '^(redirects_total|link_cache_lookups_total|clicks_enqueued_total|click_stream_length)'
+docker compose exec api-1 wget -qO- http://127.0.0.1:8080/metrics \
+  | grep -E '^(redirects|link_cache|clicks_enqueued|click_stream)'
 ```
 
 In development mode, `curl -s localhost:8080/metrics` works directly. `link_cache_lookups_total` shows hits versus misses, `click_stream_length` is the click backlog.
@@ -374,48 +506,221 @@ Development mode makes this easy.
 ### Run or debug one test
 
 ```bash
-npm --prefix server run test:unit -- test/unit/short-code.test.js        # one file
-npm --prefix server run test:unit -- -t "private"                        # every test whose name contains "private"
-npm --prefix server run test:integration -- test/integration/api-redirect.test.js   # needs npm run infra:up
-npm --prefix client test -- src/hooks/useAsync.test.jsx                  # one client file
-npm --prefix client run test:watch                                       # re-run client tests on every save
+# one file
+npm --prefix server run test:unit -- test/unit/short-code.test.js
+
+# every test whose name contains "private"
+npm --prefix server run test:unit -- -t "private"
+
+# an integration file (needs `npm run infra:up`)
+npm --prefix server run test:integration -- test/integration/api-redirect.test.js
+
+# one client file, then all client tests again on every save
+npm --prefix client test -- src/hooks/useAsync.test.jsx
+npm --prefix client run test:watch
 ```
 
 To pause inside a test, start it with the inspector and attach from VS Code (**Debug: Attach to Node Process**) or `chrome://inspect`:
 
 ```bash
-cd server && npx vitest run --project unit --inspect-brk --no-file-parallelism test/unit/short-code.test.js
+cd server
+npx vitest run --project unit --inspect-brk --no-file-parallelism test/unit/short-code.test.js
 ```
 
 The integration tests use their own database (`urlshortener_test`) and Redis database 15, so they never touch your real links.
 
 ## Troubleshooting
 
-| What you see                                                                                                    | Why                                                                                                                                                                          | What to do                                                                                                                                                                                                                                   |
-| --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Cannot connect to the Docker daemon` (or `docker: command not found`)                                          | Docker is not running, or not installed                                                                                                                                      | Start Docker Desktop (on a Mac: `open -a Docker`), wait until it says it is running, then try again                                                                                                                                          |
-| `no configuration file provided: not found`                                                                     | You are not in the project folder                                                                                                                                            | `cd` into the folder that contains `docker-compose.yml`                                                                                                                                                                                      |
-| `listen EADDRINUSE: address already in use 0.0.0.0:8080` when the API starts                                    | Another program uses port 8080, usually the Docker stack (nginx)                                                                                                             | `docker compose down`, then `npm run infra:up`. To find the culprit: `lsof -nP -iTCP:8080 -sTCP:LISTEN`. To keep both running: `PORT=8090 BASE_URL=http://localhost:8090 npm run dev:api` (the React dev server still forwards to port 8080) |
-| `Bind for 0.0.0.0:5432 failed: port is already allocated` (also 6379 or 8080)                                   | A local PostgreSQL or Redis, or another container, already owns that port                                                                                                    | Stop that program, or change the left-hand number in the `ports:` line of `docker-compose.yml` (for example `'5433:5432'`) and, in development mode, the port in `DATABASE_URL` or `REDIS_URL` in `server/.env`                              |
-| `Invalid environment configuration: - DATABASE_URL: ...`                                                        | The server refuses to start without its settings, and `server/.env` is missing                                                                                               | `cp server/.env.example server/.env`, then start the program again                                                                                                                                                                           |
-| `ECONNREFUSED` on port 5432 or 6379                                                                             | PostgreSQL or Redis is not running                                                                                                                                           | `npm run infra:up`, then check `docker compose ps`                                                                                                                                                                                           |
-| `Cannot reach Postgres for integration tests`                                                                   | The integration tests need the databases                                                                                                                                     | `npm run infra:up`, then run the tests again                                                                                                                                                                                                 |
-| <http://localhost:8080> shows `{"error":{"code":"ROUTE_NOT_FOUND", ...}}` instead of the app (development mode) | The React app has not been built, so the API can only answer with JSON (it logs `UI build not found`)                                                                        | `npm run build`, or use the dev server at <http://localhost:5173>                                                                                                                                                                            |
-| The React dev server (port 5173) shows errors or no data                                                        | The API is not running on port 8080                                                                                                                                          | Start it with `npm run dev:api`                                                                                                                                                                                                              |
-| Links work, but clicks and analytics stay at 0                                                                  | The worker is not running, **or** you clicked with `curl` (counted as a bot, hidden by default), **or** it has not been processed yet (the worker handles clicks in batches) | Start the worker (`npm run dev:worker`, or check `docker compose ps worker`). Add `?includeBots=true` to the analytics URL. Look at the waiting events: `docker compose exec redis redis-cli XLEN clicks`. Give it a few seconds             |
-| `429 Too Many Requests`, error code `RATE_LIMITED`                                                              | A per-IP rate limit was hit (for example 10 logins per minute)                                                                                                               | Wait the number of seconds in the `Retry-After` header. For experiments in development mode, set `RATE_LIMIT_ENABLED=false` in `server/.env` and restart the API                                                                             |
-| You changed the code but Docker still behaves the old way                                                       | The containers run the code copied into the image when it was built                                                                                                          | `docker compose up --build -d --wait`. (Development mode restarts by itself.)                                                                                                                                                                |
-| You are signed out after switching between Docker mode and development mode                                     | Each mode signs login tokens with a different `JWT_SECRET`                                                                                                                   | Sign in again. Your links are shared; only the session differs                                                                                                                                                                               |
-| Short links show the wrong host or port                                                                         | `BASE_URL` does not match the address you use                                                                                                                                | Set `BASE_URL` in `server/.env`, or for Docker: `BASE_URL=http://localhost:9090 docker compose up -d`                                                                                                                                        |
-| `docker compose up` stops with `dependency failed to start` or `unhealthy`                                      | One service failed its health check                                                                                                                                          | `docker compose ps -a`, then `docker compose logs <service>` and read the last lines                                                                                                                                                         |
-| The build fails with `no space left on device`                                                                  | Docker's disk is full of old images and build cache                                                                                                                          | `docker system df` shows what uses the space. `docker builder prune` clears the build cache                                                                                                                                                  |
-| You want a completely fresh start                                                                               | -                                                                                                                                                                            | `docker compose down -v` deletes **all** data, then start again                                                                                                                                                                              |
+Click a symptom to see why it happens and how to fix it.
 
-Still stuck? Read the logs of the service that misbehaves ([Read the logs](#read-the-logs)) and look for the first error, not the last one.
+### Docker and ports
+
+<details>
+<summary><code>Cannot connect to the Docker daemon</code> (or <code>docker: command not found</code>)</summary>
+
+**Why:** Docker is not running, or not installed.
+
+**Fix:** start Docker Desktop (on a Mac: `open -a Docker`), wait until it says it is running, then try again.
+
+</details>
+
+<details>
+<summary><code>no configuration file provided: not found</code></summary>
+
+**Why:** you are not in the project folder.
+
+**Fix:** `cd` into the folder that contains `docker-compose.yml`.
+
+</details>
+
+<details>
+<summary><code>listen EADDRINUSE: address already in use 0.0.0.0:8080</code> when the API starts</summary>
+
+**Why:** another program uses port 8080, usually the Docker stack (nginx).
+
+**Fix:** stop the Docker stack, then start only the databases again. To find out who owns the port, use `lsof`:
+
+```bash
+docker compose down
+npm run infra:up
+lsof -nP -iTCP:8080 -sTCP:LISTEN
+```
+
+To keep both running, give the API another port (the React dev server still forwards to port 8080):
+
+```bash
+PORT=8090 BASE_URL=http://localhost:8090 npm run dev:api
+```
+
+</details>
+
+<details>
+<summary><code>Bind for 0.0.0.0:5432 failed: port is already allocated</code> (also 6379 or 8080)</summary>
+
+**Why:** a local PostgreSQL or Redis, or another container, already owns that port.
+
+**Fix:** stop that program, or change the left-hand number in the `ports:` line of `docker-compose.yml` (for example `'5433:5432'`) and, in development mode, the port in `DATABASE_URL` or `REDIS_URL` in `server/.env`.
+
+</details>
+
+<details>
+<summary><code>docker compose up</code> stops with <code>dependency failed to start</code> or <code>unhealthy</code></summary>
+
+**Why:** one service failed its health check.
+
+**Fix:** find the service, then read the last lines of its log:
+
+```bash
+docker compose ps -a
+docker compose logs <service>
+```
+
+</details>
+
+<details>
+<summary>The build fails with <code>no space left on device</code></summary>
+
+**Why:** Docker's disk is full of old images and build cache.
+
+**Fix:** `docker system df` shows what uses the space. `docker builder prune` clears the build cache.
+
+</details>
+
+### Setup and configuration
+
+<details>
+<summary><code>Invalid environment configuration: - DATABASE_URL: ...</code></summary>
+
+**Why:** the server refuses to start without its settings, and `server/.env` is missing.
+
+**Fix:** `cp server/.env.example server/.env`, then start the program again.
+
+</details>
+
+<details>
+<summary><code>ECONNREFUSED</code> on port 5432 or 6379</summary>
+
+**Why:** PostgreSQL or Redis is not running.
+
+**Fix:** `npm run infra:up`, then check `docker compose ps`.
+
+</details>
+
+<details>
+<summary><code>Cannot reach Postgres for integration tests</code></summary>
+
+**Why:** the integration tests need the databases.
+
+**Fix:** `npm run infra:up`, then run the tests again.
+
+</details>
+
+<details>
+<summary>Short links show the wrong host or port</summary>
+
+**Why:** `BASE_URL` does not match the address you use.
+
+**Fix:** set `BASE_URL` in `server/.env`, or for Docker: `BASE_URL=http://localhost:9090 docker compose up -d`.
+
+</details>
+
+<details>
+<summary>You are signed out after switching between Docker mode and development mode</summary>
+
+**Why:** each mode signs login tokens with a different `JWT_SECRET`.
+
+**Fix:** sign in again. Your links are shared; only the session differs.
+
+</details>
+
+### The app behaves oddly
+
+<details>
+<summary><code>http://localhost:8080</code> shows <code>{"error":{"code":"ROUTE_NOT_FOUND", ...}}</code> instead of the app (development mode)</summary>
+
+**Why:** the React app has not been built, so the API can only answer with JSON (it logs `UI build not found`).
+
+**Fix:** run `npm run build`, or use the dev server at <http://localhost:5173>.
+
+</details>
+
+<details>
+<summary>The React dev server (port 5173) shows errors or no data</summary>
+
+**Why:** the API is not running on port 8080.
+
+**Fix:** start it with `npm run dev:api`.
+
+</details>
+
+<details>
+<summary>Links work, but clicks and analytics stay at 0</summary>
+
+**Why:** one of three things: the worker is not running; you clicked with `curl` (counted as a bot and hidden by default); or the click has not been processed yet (the worker handles clicks in batches).
+
+**Fix:** start the worker (`npm run dev:worker`, or check `docker compose ps worker`). Add `?includeBots=true` to the analytics URL. Look at the events that are still waiting, and give it a few seconds:
+
+```bash
+docker compose exec redis redis-cli XLEN clicks
+```
+
+</details>
+
+<details>
+<summary><code>429 Too Many Requests</code>, error code <code>RATE_LIMITED</code></summary>
+
+**Why:** a per-IP rate limit was hit (for example 10 logins per minute).
+
+**Fix:** wait the number of seconds in the `Retry-After` header. For experiments in development mode, set `RATE_LIMIT_ENABLED=false` in `server/.env` and restart the API.
+
+</details>
+
+<details>
+<summary>You changed the code but Docker still behaves the old way</summary>
+
+**Why:** the containers run the code that was copied into the image when it was built.
+
+**Fix:** `docker compose up --build -d --wait`. (Development mode restarts by itself.)
+
+</details>
+
+<details>
+<summary>You want a completely fresh start</summary>
+
+**Fix:** `docker compose down -v` deletes **all** data, then start again.
+
+</details>
+
+> [!TIP]
+> Still stuck? Read the logs of the service that misbehaves ([Read the logs](#read-the-logs)) and look for the first error, not the last one.
 
 ## API overview
 
 Full, interactive reference (generated from the code) at **`/docs`**.
+
+<p align="center">
+  <img src="docs/screenshots/api-docs.png" alt="Swagger UI listing the API endpoints" width="720" />
+</p>
 
 | Method & path                          | Auth     | Purpose                                                                      |
 | -------------------------------------- | -------- | ---------------------------------------------------------------------------- |
@@ -452,9 +757,27 @@ All configuration is environment variables, validated at startup (the process re
 
 ## Design decisions and trade-offs
 
-These are the choices worth discussing; each is small, deliberate and covered by tests.
+These are the choices worth discussing; each is small, deliberate and covered by tests. The table is the short version. Open the sections below it for the full reasoning.
 
-### Backend
+| Decision                           | Why, in one line                                                                                                                    |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **`302`, not `301`**               | Browsers cache permanent redirects and would stop calling the service, silently breaking click counts, edits, expiry and takedowns. |
+| **Random base62 codes**            | 62⁷ ≈ 3.5 trillion codes need no coordination between replicas and are unguessable. A collision is just a retry.                    |
+| **Cache-aside, three protections** | Negative caching, single-flight and TTL jitter keep the database quiet.                                                             |
+| **Graceful degradation**           | Redis down: redirects fall back to PostgreSQL. PostgreSQL down: cached links keep redirecting.                                      |
+| **Idempotent click ingestion**     | At-least-once delivery plus a unique event id gives an exactly-once effect. Crashed workers' entries are reclaimed.                 |
+| **Analytics SQL**                  | One index range scan, so the cost scales with the range, not the table.                                                             |
+| **Destination policy**             | Blocks private, loopback and cloud-metadata addresses in every spelling, plus credentials in URLs and redirect loops.               |
+| **Privacy**                        | Visitors are counted with a keyed hash; raw IPs are never stored or queued.                                                         |
+| **Auth details**                   | scrypt, constant-time comparison, no account enumeration through timing, bearer tokens (so no CSRF).                                |
+| **Soft delete**                    | A deleted code stays reserved, so an old printed QR code can never be re-pointed.                                                   |
+| **Routes declare themselves**      | One object gives you validation, rate limiting and the OpenAPI docs, so they cannot drift apart.                                    |
+| **Middleware order**               | Rate limiting comes before body parsing, and bad tokens are throttled too.                                                          |
+| **Proxy trust is a hop count**     | Clients cannot spoof their IP through `X-Forwarded-For`.                                                                            |
+| **Plain React**                    | Context and small hooks, no stale responses, native `<dialog>`, XSS-safe by construction.                                           |
+
+<details>
+<summary><b>🧱 Backend</b>: 10 decisions explained</summary>
 
 - **`302`, not `301`.** Browsers cache permanent redirects and would never call the service again, silently breaking click counts, edits, expiry and takedowns. The cost is one request per click, which the cache makes cheap.
 - **Random base62 codes with a database uniqueness check** instead of a counter or hash. 62⁷ ≈ 3.5 trillion codes, generated from a CSPRNG with rejection sampling (no modulo bias), need no coordination between replicas and are unguessable; a collision is just a retry (odds per attempt are links ÷ 62⁷: about 1 in 3.5 million at a million links, 1 in 3,500 at a billion — and five attempts all failing at a billion links is ~10⁻¹⁸). The unique index is the source of truth; the code length can be raised long before the table nears 10¹⁰ rows.
@@ -467,7 +790,10 @@ These are the choices worth discussing; each is small, deliberate and covered by
 - **Auth details.** scrypt (OWASP parameters, self-describing hash format so cost can be raised later), constant-time comparison, a dummy hash for unknown emails so response time does not reveal which accounts exist, bearer tokens (no cookies, so no CSRF), 1 h lifetime.
 - **Soft delete.** A deleted code stays reserved, so an old printed QR code can never be re-pointed by someone else.
 
-### Express specifics
+</details>
+
+<details>
+<summary><b>🚏 Express specifics</b>: 7 decisions explained</summary>
 
 - **Routes declare themselves.** Each route is one object — security, rate limit, input schemas, responses, docs and the controller function that handles it — and [`router-factory.js`](server/src/routes/router-factory.js) turns it into the middleware chain _and_ an entry in the OpenAPI document. Validation, behaviour and documentation cannot drift apart, and a test validates the generated document with a real OpenAPI parser.
 - **Middleware order is a security feature.** `identify caller → rate limit → reject bad token → require login → parse body → validate → handler`. Rejecting a bad token _after_ the limiter means unauthenticated and bad-token requests are throttled too (a real hole the test suite caught). Rate limiting sits before body parsing, so floods are cut off before any work is done. Express runs middleware in registration order, so the catch-all `/:code` redirect is mounted last.
@@ -477,7 +803,10 @@ These are the choices worth discussing; each is small, deliberate and covered by
 - **Draining on shutdown.** On `SIGTERM` the server answers in-flight requests with `Connection: close`, stops accepting new ones, then closes the pool and Redis — exits in under a second, code 0.
 - **Express 5 conveniences used deliberately:** async handlers that throw reach the error middleware without wrappers; parsed input lives on `req.input` because `req.query` is read-only.
 
-### Frontend
+</details>
+
+<details>
+<summary><b>⚛️ Frontend</b>: 5 decisions explained</summary>
 
 - **Plain React, small surface.** Context for auth, links and toasts; a few hooks; no state library and no router — short codes live at the URL root, so client-side routes would collide with them.
 - **No stale responses.** `useAsync` stores each result with the key it belongs to and aborts the previous request (`AbortController`), so a slow answer can never overwrite a newer one; "loading" is derived, not set inside effects.
@@ -485,9 +814,14 @@ These are the choices worth discussing; each is small, deliberate and covered by
 - **XSS-safe by construction.** React escapes text; `react/no-danger` is an error, a test scans the sources for `innerHTML`/`eval`, and a component test renders a hostile destination URL and checks it stays text.
 - **Session handling.** The token lives in `localStorage` (simple, survives reloads; the strict Content-Security-Policy is the mitigation for XSS). An invalid or expired token signs the user out with an explanation.
 
-### Plain JavaScript, on purpose
+</details>
+
+<details>
+<summary><b>🟨 Plain JavaScript, on purpose</b>: why there is no TypeScript</summary>
 
 Without a compiler, correctness comes from other layers: zod validates every boundary (env, request bodies, stream events); closures keep each module's internals private (there are no classes, and a lint rule keeps it that way); and the contract tests parse real API responses with the same strict schemas that generate the docs, so a leaked or missing field fails a test.
+
+</details>
 
 ## Testing
 
@@ -520,7 +854,10 @@ Measured on a MacBook Air (Apple silicon) with [`npm --prefix server run loadtes
 | Create link (insert + cache write), one process  |       ~7,600 | 12 ms | 23 ms |
 | Redirect, full Docker stack (nginx + 2 replicas) |      ~11,200 | 8 ms  | 43 ms |
 
-The redirect path is served entirely from Redis; during the full-stack run the worker stored every one of the ~123,000 click events with no backlog. The Docker figure is lower mainly because Docker Desktop on macOS routes all traffic through a VM. These numbers were measured before the code was reorganised into layers and plain factory functions; the logic is the same, but they have not been measured again, so run the load test yourself for figures from your machine.
+The redirect path is served entirely from Redis; during the full-stack run the worker stored every one of the ~123,000 click events with no backlog. The Docker figure is lower mainly because Docker Desktop on macOS routes all traffic through a VM.
+
+> [!NOTE]
+> These numbers were measured before the code was reorganised into layers and plain factory functions. The logic is the same, but they have not been measured again, so run the load test yourself for figures from your machine.
 
 ## Scaling further
 
@@ -541,16 +878,16 @@ server/                          Express API and click worker
     server.js · worker.js        Process entry points (API, click worker)
     app.js · dependencies.js     Express assembly · where every object is created and wired
     constants.js · errors.js     Enums and fixed values · error helpers
-    routes/                      One file per endpoint group: URL, security, validation, OpenAPI docs
-    controllers/                 HTTP handlers: read the request, call a service, send the response
-    middleware/                  Auth, rate limits, validation, security headers, request id, errors, UI
+    routes/                      One file per endpoint group: URL, security, validation, docs
+    controllers/                 HTTP handlers: read the request, call a service, respond
+    middleware/                  Auth, rate limits, validation, headers, request id, errors, UI
     schemas/                     zod schemas for requests, responses and click events
-    services/                    Business rules: links, auth, analytics, redirect lookup, click tracking
+    services/                    Business rules: links, auth, analytics, redirects, clicks
     repositories/                SQL only: links, users, clicks
     cache/                       Redis link cache (cache-aside)
     queue/                       Click events: Redis Stream publisher and the worker's consumer
-    infra/                       Postgres pool, Redis clients, logger, metrics, migrations, shutdown
-    utils/                       Small pure helpers: short codes, pagination, QR, dates, click enrichment
+    infra/                       Postgres, Redis, logger, metrics, migrations, shutdown
+    utils/                       Pure helpers: short codes, pagination, QR, dates, enrichment
     config/                      Environment validation
   migrations/                    Plain SQL, applied in order inside transactions
   scripts/                       loadtest.mjs · seed-clicks.js
@@ -562,7 +899,7 @@ client/                          React single page app (Vite)
     context/ · hooks/            Auth, links and toast state · data-loading hooks
     components/                  Dialogs, forms, list, analytics chart
     test/                        Fake API and render helpers
-docs/                            HOW-IT-WORKS.md (beginner's guide) · architecture-flow.html · screenshots/
+docs/                            HOW-IT-WORKS.md (beginner guide) · diagrams · images
 nginx/ · Dockerfile · docker-compose.yml · .github/workflows/ci.yml
 .nvmrc                           Node version for nvm and fnm
 ```
@@ -573,13 +910,13 @@ nginx/ · Dockerfile · docker-compose.yml · .github/workflows/ci.yml
 
 A request travels through the folders in this order, and each layer only talks to the next one:
 
-```text
-routes/        declare the endpoint: URL, security, validation, docs
-middleware/    auth, rate limits, validation
-controllers/   read the request, call a service, send the response
-services/      business rules (no HTTP in here)
-repositories/  all SQL            cache/  Redis link cache
-```
+| Layer | Folder                       | Its job                                               |
+| ----- | ---------------------------- | ----------------------------------------------------- |
+| 1     | `routes/`                    | Declare the endpoint: URL, security, validation, docs |
+| 2     | `middleware/`                | Auth, rate limits, validation                         |
+| 3     | `controllers/`               | Read the request, call a service, send the response   |
+| 4     | `services/`                  | Business rules. They never see `req` or `res`         |
+| 5     | `repositories/` and `cache/` | All SQL, and the Redis link cache                     |
 
 The rules we follow:
 

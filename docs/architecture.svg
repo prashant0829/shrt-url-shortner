@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" role="img" aria-labelledby="arch-title arch-desc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title id="arch-title">shrt architecture</title>
+  <desc id="arch-desc">A browser or API client calls nginx, which load balances two stateless Express API replicas. The API reads and writes a Redis cache and rate limits, queues click events on a Redis Stream, and queries PostgreSQL on a cache miss. A click worker reads the stream and stores the clicks in PostgreSQL in batches.</desc>
+  <defs>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M1 1l8 4-8 4z" fill="#2456d6" />
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M1 1l8 4-8 4z" fill="#8250df" />
+    </marker>
+  </defs>
+
+  <rect x="0.75" y="0.75" width="958.5" height="478.5" rx="16" fill="#f7f9fc" stroke="#dde2ea" stroke-width="1.5" />
+
+  <!-- client -> nginx -> API replicas -->
+  <rect x="32" y="64" width="150" height="64" rx="32" fill="#ffffff" stroke="#5a6675" stroke-width="1.5" />
+  <text x="107" y="93" text-anchor="middle" font-size="15" font-weight="700" fill="#1c2430">Browser</text>
+  <text x="107" y="112" text-anchor="middle" font-size="12" fill="#5a6675">or API client</text>
+
+  <rect x="236" y="64" width="130" height="64" rx="12" fill="#f0faf3" stroke="#009639" stroke-width="1.5" />
+  <text x="301" y="93" text-anchor="middle" font-size="15" font-weight="700" fill="#1c2430">nginx</text>
+  <text x="301" y="112" text-anchor="middle" font-size="12" fill="#5a6675">load balancer</text>
+
+  <line x1="184" y1="96" x2="232" y2="96" stroke="#2456d6" stroke-width="2" marker-end="url(#arrow-blue)" />
+  <line x1="368" y1="96" x2="416" y2="96" stroke="#2456d6" stroke-width="2" marker-end="url(#arrow-blue)" />
+
+  <rect x="420" y="36" width="508" height="120" rx="16" fill="#eef3ff" stroke="#2456d6" stroke-width="1.5" />
+  <text x="440" y="57" font-size="11" font-weight="700" letter-spacing="1.5" fill="#2456d6">2 STATELESS API REPLICAS</text>
+  <rect x="440" y="70" width="216" height="68" rx="10" fill="#ffffff" stroke="#2456d6" stroke-width="1.25" />
+  <text x="548" y="98" text-anchor="middle" font-size="15" font-weight="700" fill="#1c2430">Express API 1</text>
+  <text x="548" y="118" text-anchor="middle" font-size="12" fill="#5a6675">+ React bundle</text>
+  <rect x="692" y="70" width="216" height="68" rx="10" fill="#ffffff" stroke="#2456d6" stroke-width="1.25" />
+  <text x="800" y="98" text-anchor="middle" font-size="15" font-weight="700" fill="#1c2430">Express API 2</text>
+  <text x="800" y="118" text-anchor="middle" font-size="12" fill="#5a6675">+ React bundle</text>
+
+  <!-- Redis -->
+  <path d="M540 264v56a80 14 0 0 0 160 0v-56" fill="#fff1ef" stroke="#dc382d" stroke-width="1.5" />
+  <ellipse cx="620" cy="264" rx="80" ry="14" fill="#ffe3df" stroke="#dc382d" stroke-width="1.5" />
+  <text x="620" y="298" text-anchor="middle" font-size="15" font-weight="700" fill="#1c2430">Redis</text>
+  <text x="620" y="316" text-anchor="middle" font-size="12" fill="#5a6675">cache · limits · stream</text>
+
+  <!-- PostgreSQL -->
+  <path d="M750 264v56a80 14 0 0 0 160 0v-56" fill="#eef1ff" stroke="#4169e1" stroke-width="1.5" />
+  <ellipse cx="830" cy="264" rx="80" ry="14" fill="#dfe6ff" stroke="#4169e1" stroke-width="1.5" />
+  <text x="830" y="298" text-anchor="middle" font-size="15" font-weight="700" fill="#1c2430">PostgreSQL</text>
+  <text x="830" y="316" text-anchor="middle" font-size="12" fill="#5a6675">links · users · clicks</text>
+
+  <!-- API -> stores -->
+  <line x1="596" y1="158" x2="596" y2="246" stroke="#2456d6" stroke-width="2" marker-start="url(#arrow-blue)" marker-end="url(#arrow-blue)" />
+  <text x="588" y="196" text-anchor="end" font-size="12" fill="#44505f">link cache,</text>
+  <text x="588" y="212" text-anchor="end" font-size="12" fill="#44505f">rate limits</text>
+  <line x1="644" y1="158" x2="644" y2="246" stroke="#8250df" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow-purple)" />
+  <text x="654" y="196" font-size="12" fill="#44505f">XADD</text>
+  <text x="654" y="212" font-size="12" fill="#44505f">click event</text>
+  <line x1="830" y1="158" x2="830" y2="246" stroke="#2456d6" stroke-width="2" marker-start="url(#arrow-blue)" marker-end="url(#arrow-blue)" />
+  <text x="842" y="196" font-size="12" fill="#44505f">cache miss,</text>
+  <text x="842" y="212" font-size="12" fill="#44505f">link CRUD,</text>
+  <text x="842" y="228" font-size="12" fill="#44505f">reports</text>
+
+  <!-- worker -->
+  <rect x="640" y="400" width="180" height="56" rx="10" fill="#f6f1ff" stroke="#8250df" stroke-width="1.5" />
+  <text x="730" y="425" text-anchor="middle" font-size="15" font-weight="700" fill="#1c2430">Click worker</text>
+  <text x="730" y="443" text-anchor="middle" font-size="12" fill="#5a6675">batch · enrich · insert</text>
+  <line x1="670" y1="398" x2="670" y2="340" stroke="#8250df" stroke-width="2" stroke-dasharray="6 5" marker-start="url(#arrow-purple)" marker-end="url(#arrow-purple)" />
+  <text x="660" y="366" text-anchor="end" font-size="12" fill="#44505f">XREADGROUP</text>
+  <text x="660" y="382" text-anchor="end" font-size="12" fill="#44505f">+ XACK</text>
+  <line x1="790" y1="398" x2="790" y2="340" stroke="#8250df" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow-purple)" />
+  <text x="800" y="366" font-size="12" fill="#44505f">batch INSERT</text>
+  <text x="800" y="382" font-size="12" fill="#44505f">(idempotent)</text>
+
+  <!-- legend -->
+  <text x="40" y="318" font-size="12" font-weight="700" letter-spacing="1.5" fill="#5a6675">HOW TO READ IT</text>
+  <line x1="40" y1="346" x2="88" y2="346" stroke="#2456d6" stroke-width="2" marker-end="url(#arrow-blue)" />
+  <text x="100" y="350" font-size="13" fill="#1c2430">Request path: redirects, API calls, cache and SQL</text>
+  <line x1="40" y1="376" x2="88" y2="376" stroke="#8250df" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow-purple)" />
+  <text x="100" y="380" font-size="13" fill="#1c2430">Click pipeline: runs in the background</text>
+  <text x="40" y="420" font-size="12" font-style="italic" fill="#5a6675">A redirect asks Redis first and only goes to</text>
+  <text x="40" y="436" font-size="12" font-style="italic" fill="#5a6675">PostgreSQL on a cache miss.</text>
+</svg>
