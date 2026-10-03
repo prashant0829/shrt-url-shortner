@@ -1,40 +1,25 @@
-import http from 'node:http';
 import { createApp } from './app.js';
-import { ConfigError, loadConfig } from './config/index.js';
-import { createContainer } from './container.js';
-import { installCrashHandlers, onShutdown } from './shared/lifecycle.js';
+import { loadConfigOrExit } from './config/index.js';
+import { createDependencies } from './dependencies.js';
+import { HEADERS_TIMEOUT_MS, KEEP_ALIVE_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from './constants.js';
+import { installCrashHandlers, onShutdown } from './infra/lifecycle.js';
 
-let config;
-try {
-  config = loadConfig();
-} catch (err) {
-  if (err instanceof ConfigError) {
-    console.error(err.message);
-    process.exit(1);
-  }
-  throw err;
-}
-
-const container = createContainer(config);
-const { logger } = container;
+const config = loadConfigOrExit();
+const dependencies = createDependencies(config);
+const { logger } = dependencies;
 installCrashHandlers(logger);
 
-const app = createApp(container);
-const server = http.createServer(app);
+const app = createApp(dependencies);
 
-// Longer than typical load-balancer idle timeouts (60 s), so keep-alive sockets are not reset
-// underneath the balancer. headersTimeout must exceed keepAliveTimeout.
-server.keepAliveTimeout = 65_000;
-server.headersTimeout = 66_000;
-server.requestTimeout = 30_000;
+// app.listen() returns the Node http.Server that Express runs on. We need it for the timeouts and
+// for closing the server on shutdown.
+const server = app.listen(config.server.port, config.server.host);
+server.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS;
+server.headersTimeout = HEADERS_TIMEOUT_MS;
+server.requestTimeout = REQUEST_TIMEOUT_MS;
 
-// Order matters: stop accepting requests and drain in-flight ones, then release connections.
-onShutdown(logger, async () => {
-  app.locals.shuttingDown = true;
-  await new Promise((resolve, reject) => {
-    server.close((err) => (err ? reject(err) : resolve()));
-  });
-  await container.close();
+server.on('listening', () => {
+  logger.info({ host: config.server.host, port: config.server.port }, 'server listening');
 });
 
 server.on('error', (err) => {
@@ -42,6 +27,11 @@ server.on('error', (err) => {
   process.exit(1);
 });
 
-server.listen(config.server.port, config.server.host, () => {
-  logger.info({ host: config.server.host, port: config.server.port }, 'server listening');
+// Order matters: stop accepting requests and drain the ones in flight, then release connections.
+onShutdown(logger, async () => {
+  app.locals.shuttingDown = true;
+  await new Promise((resolve, reject) => {
+    server.close((err) => (err ? reject(err) : resolve()));
+  });
+  await dependencies.close();
 });

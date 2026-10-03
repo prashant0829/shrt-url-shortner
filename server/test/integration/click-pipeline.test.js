@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EVENT_FIELD } from '../../src/modules/analytics/click-events.js';
-import { ClickConsumer } from '../../src/modules/analytics/click-consumer.js';
-import { ClickRepository } from '../../src/modules/analytics/click.repository.js';
-import { RedisClickPublisher } from '../../src/modules/analytics/redis-click-publisher.js';
-import { LinkRepository } from '../../src/modules/links/link.repository.js';
+import { CLICK_EVENT_FIELD } from '../../src/constants.js';
+import { createClickConsumer } from '../../src/queue/click-consumer.js';
+import { createClickRepository } from '../../src/repositories/click.repository.js';
+import { createRedisClickPublisher } from '../../src/queue/redis-click-publisher.js';
+import { createLinkRepository } from '../../src/repositories/link.repository.js';
 import { createConsumer, createTestContext, resetState } from '../helpers/context.js';
 import { TEST_REDIS_URL } from '../helpers/env.js';
 import { createRedis } from '../../src/infra/redis.js';
@@ -33,27 +33,27 @@ const event = (overrides = {}) => ({
 });
 
 const consumer = (overrides = {}) => {
-  const worker = createConsumer(ctx.container, overrides);
+  const worker = createConsumer(ctx.dependencies, overrides);
   workers.push(worker);
   return worker.consumer;
 };
 
 const clickRows = async () =>
-  (await ctx.container.pool.query('SELECT count(*)::int AS n FROM clicks')).rows[0].n;
+  (await ctx.dependencies.pool.query('SELECT count(*)::int AS n FROM clicks')).rows[0].n;
 
 const clickCount = async () =>
-  (await ctx.container.pool.query('SELECT click_count FROM links WHERE id = $1', [linkId])).rows[0]
-    .click_count;
+  (await ctx.dependencies.pool.query('SELECT click_count FROM links WHERE id = $1', [linkId]))
+    .rows[0].click_count;
 
 const pendingCount = async () => {
-  const summary = await ctx.container.redis.xpending(streamKey(), GROUP);
+  const summary = await ctx.dependencies.redis.xpending(streamKey(), GROUP);
 
   return Number(summary[0]);
 };
 
 beforeAll(async () => {
   ctx = await createTestContext();
-  publisher = new RedisClickPublisher(ctx.container.redis, {
+  publisher = createRedisClickPublisher(ctx.dependencies.redis, {
     streamKey: streamKey(),
     maxLength: 10_000,
   });
@@ -62,7 +62,7 @@ afterAll(() => ctx.close());
 
 beforeEach(async () => {
   await resetState();
-  const link = await new LinkRepository(ctx.container.pool).insert({
+  const link = await createLinkRepository(ctx.dependencies.pool).insert({
     code: 'pipeline',
     originalUrl: 'https://dest.test/',
     userId: null,
@@ -82,13 +82,13 @@ describe('click pipeline (Redis Stream -> worker -> Postgres)', () => {
       publisher.publish(event()),
       publisher.publish(event()),
     ]);
-    expect(await ctx.container.redis.xlen(streamKey())).toBe(3);
+    expect(await ctx.dependencies.redis.xlen(streamKey())).toBe(3);
 
     expect(await consumer().processOnce()).toBe(3);
 
     expect(await clickRows()).toBe(3);
     expect(await clickCount()).toBe(3);
-    expect(await ctx.container.redis.xlen(streamKey())).toBe(0);
+    expect(await ctx.dependencies.redis.xlen(streamKey())).toBe(0);
     expect(await pendingCount()).toBe(0);
   });
 
@@ -119,7 +119,7 @@ describe('click pipeline (Redis Stream -> worker -> Postgres)', () => {
     await publisher.publish(event({ userAgent: GOOGLEBOT, country: null }));
     await consumer().processOnce();
 
-    const { rows } = await ctx.container.pool.query(
+    const { rows } = await ctx.dependencies.pool.query(
       'SELECT browser, os, device_type, referrer_host, country, is_bot FROM clicks ORDER BY id',
     );
     expect(rows[0]).toEqual({
@@ -135,10 +135,15 @@ describe('click pipeline (Redis Stream -> worker -> Postgres)', () => {
   });
 
   it('drops malformed entries yet still processes the valid ones in the same batch', async () => {
-    const redis = ctx.container.redis;
-    await redis.xadd(streamKey(), '*', EVENT_FIELD, 'this is not json');
+    const redis = ctx.dependencies.redis;
+    await redis.xadd(streamKey(), '*', CLICK_EVENT_FIELD, 'this is not json');
     await redis.xadd(streamKey(), '*', 'unrelated', 'field');
-    await redis.xadd(streamKey(), '*', EVENT_FIELD, JSON.stringify({ eventId: 'not-a-uuid' }));
+    await redis.xadd(
+      streamKey(),
+      '*',
+      CLICK_EVENT_FIELD,
+      JSON.stringify({ eventId: 'not-a-uuid' }),
+    );
     await publisher.publish(event());
 
     expect(await consumer().processOnce()).toBe(4);
@@ -161,7 +166,7 @@ describe('click pipeline (Redis Stream -> worker -> Postgres)', () => {
     await publisher.publish(fixed);
 
     // First delivery: the worker stores the click, then "crashes" before acknowledging.
-    const real = new ClickRepository(ctx.container.pool);
+    const real = createClickRepository(ctx.dependencies.pool);
     let crashed = false;
     const crashy = {
       insertBatch: async (clicks) => {
@@ -173,12 +178,12 @@ describe('click pipeline (Redis Stream -> worker -> Postgres)', () => {
         return inserted;
       },
     };
-    const first = createRedis(TEST_REDIS_URL, ctx.container.logger, 'blocking');
+    const first = createRedis(TEST_REDIS_URL, ctx.dependencies.logger, 'blocking');
     workers.push({ close: async () => void first.disconnect() });
-    const failing = new ClickConsumer({
+    const failing = createClickConsumer({
       redis: first,
       writer: crashy,
-      logger: ctx.container.logger,
+      logger: ctx.dependencies.logger,
       options: {
         streamKey: streamKey(),
         group: GROUP,
@@ -204,19 +209,19 @@ describe('click pipeline (Redis Stream -> worker -> Postgres)', () => {
     await publisher.publish(event());
 
     let failures = 1;
-    const real = new ClickRepository(ctx.container.pool);
+    const real = createClickRepository(ctx.dependencies.pool);
     const flaky = {
       insertBatch: async (clicks) => {
         if (failures-- > 0) throw new Error('database unavailable');
         return real.insertBatch(clicks);
       },
     };
-    const redis = createRedis(TEST_REDIS_URL, ctx.container.logger, 'blocking');
+    const redis = createRedis(TEST_REDIS_URL, ctx.dependencies.logger, 'blocking');
     workers.push({ close: async () => void redis.disconnect() });
-    const worker = new ClickConsumer({
+    const worker = createClickConsumer({
       redis,
       writer: flaky,
-      logger: ctx.container.logger,
+      logger: ctx.dependencies.logger,
       // A long idle threshold proves the retry does not rely on reclaiming.
       options: {
         streamKey: streamKey(),
@@ -239,7 +244,7 @@ describe('click pipeline (Redis Stream -> worker -> Postgres)', () => {
     await publisher.publish(event());
 
     // A worker reads both entries and dies without acknowledging them.
-    const dead = createRedis(TEST_REDIS_URL, ctx.container.logger, 'blocking');
+    const dead = createRedis(TEST_REDIS_URL, ctx.dependencies.logger, 'blocking');
     workers.push({ close: async () => void dead.disconnect() });
     await dead.xgroup('CREATE', streamKey(), GROUP, '0', 'MKSTREAM');
     await dead.call(
@@ -265,7 +270,7 @@ describe('click pipeline (Redis Stream -> worker -> Postgres)', () => {
 
   it('does not steal entries that another worker is still processing', async () => {
     await publisher.publish(event());
-    const busy = createRedis(TEST_REDIS_URL, ctx.container.logger, 'blocking');
+    const busy = createRedis(TEST_REDIS_URL, ctx.dependencies.logger, 'blocking');
     workers.push({ close: async () => void busy.disconnect() });
     await busy.xgroup('CREATE', streamKey(), GROUP, '0', 'MKSTREAM');
     await busy.call(
@@ -305,7 +310,7 @@ describe('click pipeline (Redis Stream -> worker -> Postgres)', () => {
     await publisher.publish(event());
     await vi.waitFor(async () => expect(await clickRows()).toBe(1));
 
-    await ctx.container.redis.flushdb(); // stream and consumer group vanish
+    await ctx.dependencies.redis.flushdb(); // stream and consumer group vanish
     await publisher.publish(event());
     await vi.waitFor(async () => expect(await clickRows()).toBe(2), { timeout: 8_000 });
 
@@ -317,7 +322,7 @@ describe('click pipeline (Redis Stream -> worker -> Postgres)', () => {
     const beats = [];
     let attempts = 0;
     let failing = false;
-    const real = new ClickRepository(ctx.container.pool);
+    const real = createClickRepository(ctx.dependencies.pool);
     const writer = {
       insertBatch: async (clicks) => {
         attempts += 1;
@@ -325,12 +330,12 @@ describe('click pipeline (Redis Stream -> worker -> Postgres)', () => {
         return real.insertBatch(clicks);
       },
     };
-    const redis = createRedis(TEST_REDIS_URL, ctx.container.logger, 'blocking');
+    const redis = createRedis(TEST_REDIS_URL, ctx.dependencies.logger, 'blocking');
     workers.push({ close: async () => void redis.disconnect() });
-    const worker = new ClickConsumer({
+    const worker = createClickConsumer({
       redis,
       writer,
-      logger: ctx.container.logger,
+      logger: ctx.dependencies.logger,
       options: {
         streamKey: streamKey(),
         group: GROUP,
@@ -368,13 +373,13 @@ describe('click pipeline (Redis Stream -> worker -> Postgres)', () => {
   });
 
   it('publisher caps stream length so a dead worker cannot exhaust Redis memory', async () => {
-    const capped = new RedisClickPublisher(ctx.container.redis, {
+    const capped = createRedisClickPublisher(ctx.dependencies.redis, {
       streamKey: streamKey(),
       maxLength: 100,
     });
     for (let i = 0; i < 400; i++) await capped.publish(event());
 
     // "~" trimming works in whole blocks, so the length is bounded but not exact.
-    expect(await ctx.container.redis.xlen(streamKey())).toBeLessThan(400);
+    expect(await ctx.dependencies.redis.xlen(streamKey())).toBeLessThan(400);
   });
 });

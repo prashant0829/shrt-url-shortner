@@ -3,11 +3,11 @@ import pg from 'pg';
 import { expect } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config/index.js';
-import { createContainer } from '../../src/container.js';
+import { createDependencies } from '../../src/dependencies.js';
 import { createRedis } from '../../src/infra/redis.js';
-import { ClickConsumer } from '../../src/modules/analytics/click-consumer.js';
-import { ClickRepository } from '../../src/modules/analytics/click.repository.js';
-import { ScryptPasswordHasher } from '../../src/modules/auth/password-hasher.js';
+import { createClickConsumer } from '../../src/queue/click-consumer.js';
+import { createClickRepository } from '../../src/repositories/click.repository.js';
+import { createScryptPasswordHasher } from '../../src/services/password-hasher.service.js';
 import { TEST_DATABASE_URL, TEST_ENV, TEST_REDIS_URL } from './env.js';
 import { withInject } from './http.js';
 
@@ -19,17 +19,17 @@ let adminRedis;
 /** Builds the real application (real Postgres, real Redis) with cheap password hashing. */
 export async function createTestContext(overrides = {}) {
   const config = loadConfig({ ...TEST_ENV, ...overrides });
-  const container = createContainer(config, {
-    passwordHasher: new ScryptPasswordHasher({ N: 1024, r: 8, p: 1 }),
+  const dependencies = createDependencies(config, {
+    passwordHasher: createScryptPasswordHasher({ N: 1024, r: 8, p: 1 }),
   });
-  const app = withInject(createApp(container));
+  const app = withInject(createApp(dependencies));
 
   return {
     app,
-    container,
+    dependencies,
     config,
     async close() {
-      await container.close();
+      await dependencies.close();
       await closeAdminConnections();
     },
   };
@@ -81,14 +81,14 @@ export async function createLink(app, headers, payload) {
 }
 
 /** A click worker with its own blocking Redis connection, tuned for fast, deterministic tests. */
-export function createConsumer(container, overrides = {}) {
-  const redis = createRedis(TEST_REDIS_URL, container.logger, 'blocking');
-  const consumer = new ClickConsumer({
+export function createConsumer(dependencies, overrides = {}) {
+  const redis = createRedis(TEST_REDIS_URL, dependencies.logger, 'blocking');
+  const consumer = createClickConsumer({
     redis,
-    writer: new ClickRepository(container.pool),
-    logger: container.logger,
+    writer: createClickRepository(dependencies.pool),
+    logger: dependencies.logger,
     options: {
-      streamKey: container.config.clicks.streamKey,
+      streamKey: dependencies.config.clicks.streamKey,
       group: 'test-workers',
       consumerName: 'test-consumer',
       batchSize: 100,
@@ -109,8 +109,8 @@ export function createConsumer(container, overrides = {}) {
 }
 
 /** Processes every click currently in the stream; returns how many entries were consumed. */
-export async function drainClicks(container) {
-  const worker = createConsumer(container);
+export async function drainClicks(dependencies) {
+  const worker = createConsumer(dependencies);
   try {
     let total = 0;
     for (;;) {

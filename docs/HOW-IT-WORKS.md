@@ -164,20 +164,23 @@ A custom alias such as `/my-sale` follows the same path, but you get `ALIAS_TAKE
 
 **The space of codes.** The alphabet is `0-9`, `A-Z` and `a-z`, which is **62** characters. Seven slots give 62⁷ = **3,521,614,606,208** (about 3.5 trillion) possible codes.
 
-**The generator** ([`link-code.js`](../server/src/modules/links/link-code.js), trimmed):
+**The generator** ([`short-code.js`](../server/src/utils/short-code.js), trimmed):
 
 ```js
-export function generateCode(length = 7) {
+export function generateShortCode(length = 7) {
   let code = '';
   while (code.length < length) {
     for (const byte of randomBytes((length - code.length) * 2)) {
-      // 248 = 4 * 62: discarding larger bytes removes modulo bias
-      if (byte < 248 && code.length < length) code += ALPHABET.charAt(byte % 62);
+      if (byte < UNBIASED_BYTE_LIMIT && code.length < length) {
+        code += ALPHABET[byte % ALPHABET.length];
+      }
     }
   }
   return code;
 }
 ```
+
+`UNBIASED_BYTE_LIMIT` works out to 248 (4 × 62). The reason is explained below.
 
 **Worked example.** The computer's secure random generator hands out bytes from 0 to 255.
 
@@ -247,7 +250,7 @@ erDiagram
 
 **The problem it solves:** "it works on my machine". Docker packs a program **plus everything it needs** (the Node version, the libraries) into an **image**. Running an image gives you a **container**: an isolated process with its own little file system.
 
-> If you know object-oriented programming: **image = class, container = instance.**
+> Think of an app on your computer: **the image is the installed app file, the container is that app running.**
 
 ### The Dockerfile: a recipe in three stages
 
@@ -513,6 +516,8 @@ docker compose exec postgres psql -U shortener -d urlshortener \
 | Clicks never show up in the dashboard                           | Check the worker with `docker compose ps` and `docker compose logs worker`. Remember that bots are excluded. |
 | I want a clean slate                                            | `docker compose down -v` deletes the containers and the data, then start again with Way A.                   |
 
+More commands, debugging recipes and a longer troubleshooting table are in the [README](../README.md#troubleshooting).
+
 ## Explain it in 30 seconds
 
 > A URL shortener built with React, Express, PostgreSQL and Redis. Redirects are served from a Redis cache, so the database is rarely touched. Clicks are put on a Redis Stream and saved in batches by a separate worker, so analytics never slow a redirect, and unique event ids make double-counting impossible. Two stateless API copies run behind nginx with Docker Compose. On a laptop the full stack served about 11,000 redirects per second, and it is covered by more than 400 automated tests.
@@ -522,10 +527,10 @@ docker compose exec postgres psql -U shortener -d urlshortener \
 Read in this order and each file will make sense of the next:
 
 1. [`docker-compose.yml`](../docker-compose.yml) shows how everything connects.
-2. [`link-resolver.js`](../server/src/modules/redirect/link-resolver.js) is the redirect brain: cache first, database second.
-3. [`link-code.js`](../server/src/modules/links/link-code.js) is the code generator.
-4. [`click-consumer.js`](../server/src/modules/analytics/click-consumer.js) is the worker's loop.
-5. [`click.repository.js`](../server/src/modules/analytics/click.repository.js) holds the one big SQL statement that saves a batch of clicks.
+2. [`link-resolver.service.js`](../server/src/services/link-resolver.service.js) is the redirect brain: cache first, database second.
+3. [`short-code.js`](../server/src/utils/short-code.js) is the code generator.
+4. [`click-consumer.js`](../server/src/queue/click-consumer.js) is the worker's loop.
+5. [`click.repository.js`](../server/src/repositories/click.repository.js) holds the one big SQL statement that saves a batch of clicks.
 6. [`nginx.conf`](../nginx/nginx.conf) is the front door.
 7. [`client/src/`](../client/src/) is the React app.
 
@@ -533,7 +538,8 @@ Read in this order and each file will make sense of the next:
 url-shortener/
 ├── client/                  React app (Vite)
 ├── server/
-│   ├── src/modules/         redirect/, links/, analytics/, auth/, health/
+│   ├── src/routes/ controllers/   the endpoints and what each one does
+│   ├── src/services/ repositories/ cache/ queue/   the rules, the SQL, the Redis cache, the click queue
 │   └── migrations/          the SQL that builds the tables
 ├── nginx/                   nginx image and config
 ├── docker-compose.yml       starts everything

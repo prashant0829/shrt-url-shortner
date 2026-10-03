@@ -1,6 +1,7 @@
 import SwaggerParser from '@apidevtools/swagger-parser';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLink, createTestContext, resetState, signUp } from '../helpers/context.js';
+import { closeServer, listenOnLoopback } from '../helpers/http.js';
 
 let ctx;
 
@@ -106,9 +107,7 @@ describe('HTTP hardening', () => {
 
   it('asks keep-alive clients to reconnect elsewhere once shutdown has started', async () => {
     // supertest always sends `Connection: close`, so this one needs a real keep-alive client.
-    const server = await new Promise((resolve) => {
-      const listening = ctx.app.listen(0, () => resolve(listening));
-    });
+    const server = await listenOnLoopback(ctx.app);
     const url = `http://127.0.0.1:${server.address().port}/health/live`;
 
     try {
@@ -118,8 +117,7 @@ describe('HTTP hardening', () => {
       expect((await fetch(url)).headers.get('connection')).toBe('close');
     } finally {
       ctx.app.locals.shuttingDown = false;
-      server.closeAllConnections();
-      await new Promise((resolve) => server.close(resolve));
+      await closeServer(server);
     }
   });
 
@@ -130,7 +128,7 @@ describe('HTTP hardening', () => {
   });
 
   it('does not expose stack traces or internals when something breaks', async () => {
-    await ctx.container.pool.query('ALTER TABLE links RENAME TO links_gone');
+    await ctx.dependencies.pool.query('ALTER TABLE links RENAME TO links_gone');
     try {
       const res = await ctx.app.inject({
         method: 'POST',
@@ -145,7 +143,7 @@ describe('HTTP hardening', () => {
       });
       expect(res.body).not.toMatch(/links_gone|relation|SELECT|INSERT|at \w+/);
     } finally {
-      await ctx.container.pool.query('ALTER TABLE links_gone RENAME TO links');
+      await ctx.dependencies.pool.query('ALTER TABLE links_gone RENAME TO links');
     }
   });
 
@@ -190,9 +188,9 @@ describe('HTTP hardening', () => {
       }
       const streamKey = context.config.clicks.streamKey;
       await vi.waitFor(async () =>
-        expect(await context.container.redis.xlen(streamKey)).toBe(forwardedFor.length),
+        expect(await context.dependencies.redis.xlen(streamKey)).toBe(forwardedFor.length),
       );
-      const entries = await context.container.redis.xrange(streamKey, '-', '+');
+      const entries = await context.dependencies.redis.xrange(streamKey, '-', '+');
       return entries.map(([, fields]) => JSON.parse(fields[1]).visitorHash);
     };
 

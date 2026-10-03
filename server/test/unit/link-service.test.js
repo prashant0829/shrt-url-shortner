@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { LinkService } from '../../src/modules/links/link.service.js';
-import { UrlPolicy } from '../../src/modules/links/url-policy.js';
-import { InMemoryLinkCache, InMemoryLinkStore, TEST_URL_POLICY } from '../helpers/fakes.js';
+import { createLinkService } from '../../src/services/link.service.js';
+import { createUrlPolicy } from '../../src/services/url-policy.service.js';
+import {
+  createInMemoryLinkCache,
+  createInMemoryLinkStore,
+  TEST_URL_POLICY,
+} from '../helpers/fakes.js';
 
 const NOW = new Date('2026-06-01T12:00:00Z');
 
@@ -11,17 +15,17 @@ describe('LinkService', () => {
   let codes;
 
   const build = () =>
-    new LinkService({
+    createLinkService({
       links: store,
       cache,
-      urlPolicy: new UrlPolicy(TEST_URL_POLICY),
-      generateCode: () => codes.shift() ?? 'FALLBK1',
+      urlPolicy: createUrlPolicy(TEST_URL_POLICY),
+      generateShortCode: () => codes.shift() ?? 'FALLBK1',
       now: () => NOW,
     });
 
   beforeEach(() => {
-    store = new InMemoryLinkStore();
-    cache = new InMemoryLinkCache();
+    store = createInMemoryLinkStore();
+    cache = createInMemoryLinkCache();
     codes = [];
   });
 

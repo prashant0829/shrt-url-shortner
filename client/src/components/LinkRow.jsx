@@ -1,16 +1,7 @@
 import { formatDateTime, linkStatus, pluralize, stripProtocol, timeAgo } from '../lib/format.js';
 
-/**
- * One link in the list. Every value is rendered as text, so a hostile destination URL or alias
- * cannot inject markup.
- *
- * @param {object} props
- * @param {object} props.link A link as returned by the API.
- * @param {(link: object) => void} props.onCopy
- * @param {(link: object) => void} props.onAnalytics
- * @param {(link: object) => void} props.onToggle
- * @param {(link: object) => void} props.onDelete
- */
+// One link in the list. Every value is rendered as text, so a hostile destination URL or alias
+// cannot inject markup.
 export function LinkRow({ link, onCopy, onAnalytics, onToggle, onDelete }) {
   const status = linkStatus(link);
 

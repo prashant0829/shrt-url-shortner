@@ -1,9 +1,8 @@
 import SwaggerParser from '@apidevtools/swagger-parser';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { binaryResponse, buildOpenApiDocument } from '../../src/http/openapi.js';
-import { validate } from '../../src/http/validate.js';
-import { ValidationError } from '../../src/shared/errors.js';
+import { binaryResponse, buildOpenApiDocument } from '../../src/routes/openapi.js';
+import { validate } from '../../src/middleware/validate.middleware.js';
 
 const run = (schemas, req) => {
   let error;
@@ -53,7 +52,7 @@ describe('validate middleware', () => {
       body: { url: '', tags: [{ name: 7 }] },
     });
 
-    expect(error).toBeInstanceOf(ValidationError);
+    expect(error).toMatchObject({ name: 'ValidationError' });
     expect(error.statusCode).toBe(400);
     expect(error.code).toBe('VALIDATION_ERROR');
     expect(error.details.map(({ in: where, path }) => `${where}:${path}`).sort()).toEqual([
@@ -67,7 +66,7 @@ describe('validate middleware', () => {
 
   it('treats a missing body as invalid when a body schema exists', () => {
     const { error } = run({ body: schemas.body }, { body: undefined });
-    expect(error).toBeInstanceOf(ValidationError);
+    expect(error).toMatchObject({ name: 'ValidationError' });
     expect(error.details[0].in).toBe('body');
   });
 
@@ -82,7 +81,7 @@ describe('validate middleware', () => {
 });
 
 describe('OpenAPI generation', () => {
-  const registry = {
+  const routeRegistry = {
     routes: [
       {
         method: 'get',
@@ -110,7 +109,7 @@ describe('OpenAPI generation', () => {
         request: { params: z.object({ id: z.string() }) },
         responses: { 200: binaryResponse('A PNG image', 'image/png') },
       },
-      { method: 'get', path: '/metrics', hidden: true, request: {}, responses: {} },
+      { method: 'get', path: '/metrics', hiddenFromDocs: true, request: {}, responses: {} },
     ],
   };
 
@@ -118,7 +117,7 @@ describe('OpenAPI generation', () => {
     info: { title: 'Test API', description: 'For tests', version: '1.0.0' },
     servers: [{ url: 'http://localhost' }],
     tags: [{ name: 'Things', description: 'Things' }],
-    registry,
+    routeRegistry,
   });
 
   it('is a valid OpenAPI 3.1 document', async () => {

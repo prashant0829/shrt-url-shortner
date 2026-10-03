@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { UrlPolicy } from '../../src/modules/links/url-policy.js';
-import { BadRequestError } from '../../src/shared/errors.js';
+import { createUrlPolicy } from '../../src/services/url-policy.service.js';
 
-const policy = new UrlPolicy({
+const policy = createUrlPolicy({
   blockedDomains: ['evil.example', '.phishing.test'],
   selfHostname: 'sho.rt',
 });
@@ -25,7 +24,9 @@ describe('UrlPolicy.normalize', () => {
     ['https://user:pass@example.com', 'credentials'],
     ['https://user@example.com', 'credentials'],
   ])('rejects %s (%s)', (input) => {
-    expect(() => policy.normalize(input)).toThrow(BadRequestError);
+    expect(() => policy.normalize(input)).toThrow(
+      expect.objectContaining({ name: 'BadRequestError', code: 'INVALID_URL' }),
+    );
   });
 
   it.each([

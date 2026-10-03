@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { RedisRateLimitStore } from '../../src/http/redis-rate-limit-store.js';
+import { createRedisRateLimitStore } from '../../src/infra/redis-rate-limit-store.js';
 import { createRedis } from '../../src/infra/redis.js';
-import { createLogger } from '../../src/shared/logger.js';
+import { createLogger } from '../../src/infra/logger.js';
 import { resetState } from '../helpers/context.js';
 import { TEST_REDIS_URL } from '../helpers/env.js';
 
@@ -10,7 +10,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let redis;
 const newStore = (windowMs = 60_000, prefix = 'rl:unit:') => {
-  const store = new RedisRateLimitStore(redis, { prefix });
+  const store = createRedisRateLimitStore(redis, { prefix });
   store.init({ windowMs });
   return store;
 };
@@ -114,7 +114,7 @@ describe('RedisRateLimitStore', () => {
   it('fails loudly when Redis is unreachable, so the limiter can decide to fail open', async () => {
     const dead = createRedis('redis://127.0.0.1:6390/0', logger);
     try {
-      const store = new RedisRateLimitStore(dead, { prefix: 'rl:dead:' });
+      const store = createRedisRateLimitStore(dead, { prefix: 'rl:dead:' });
       store.init({ windowMs: 1000 });
       await expect(store.increment('client')).rejects.toThrow();
     } finally {

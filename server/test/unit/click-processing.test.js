@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMetrics } from '../../src/infra/metrics.js';
-import { enrichClick } from '../../src/modules/analytics/click-enricher.js';
-import { ClickTracker, normalizeCountry } from '../../src/modules/analytics/click-tracker.js';
-import { createLogger } from '../../src/shared/logger.js';
+import { enrichClick } from '../../src/utils/click-enricher.js';
+import { createClickTracker, normalizeCountry } from '../../src/services/click-tracker.service.js';
+import { createLogger } from '../../src/infra/logger.js';
 import { counterValue } from '../helpers/fakes.js';
 
 const IPHONE_SAFARI =
@@ -94,7 +94,7 @@ describe('ClickTracker', () => {
 
   const build = (publisher) => {
     const metrics = createMetrics();
-    const tracker = new ClickTracker({
+    const tracker = createClickTracker({
       publisher,
       visitorHashSecret: 'test-secret-1234567',
       logger,

@@ -1,9 +1,3 @@
-/**
- * @param {object} props
- * @param {{email: string} | null} props.user
- * @param {() => void} props.onSignIn
- * @param {() => void} props.onSignOut
- */
 export function Header({ user, onSignIn, onSignOut }) {
   return (
     <header className="topbar">

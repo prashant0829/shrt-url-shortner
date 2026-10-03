@@ -1,47 +1,36 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { TOAST_DISMISS_MS, ToastKind } from '../constants.js';
 
 const ToastContext = createContext(null);
-const DISMISS_AFTER_MS = 4_500;
 
-/** Shows short-lived notifications. Use `useToast()` to raise one from anywhere below. */
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
   const nextId = useRef(0);
-  const timers = useRef(new Set());
+  const dismissTimers = useRef(new Set());
 
-  const toast = useCallback((message, kind = 'info') => {
+  const showToast = useCallback((message, kind = ToastKind.INFO) => {
     const id = nextId.current++;
     setToasts((current) => [...current, { id, message, kind }]);
 
     const timer = setTimeout(() => {
-      timers.current.delete(timer);
-      setToasts((current) => current.filter((t) => t.id !== id));
-    }, DISMISS_AFTER_MS);
-    timers.current.add(timer);
+      dismissTimers.current.delete(timer);
+      setToasts((current) => current.filter((toast) => toast.id !== id));
+    }, TOAST_DISMISS_MS);
+    dismissTimers.current.add(timer);
   }, []);
 
   useEffect(() => {
-    const pending = timers.current;
-    return () => pending.forEach(clearTimeout);
+    const pendingTimers = dismissTimers.current;
+    return () => pendingTimers.forEach(clearTimeout);
   }, []);
 
-  const value = useMemo(() => ({ toast }), [toast]);
-
   return (
-    <ToastContext.Provider value={value}>
+    <ToastContext.Provider value={showToast}>
       {children}
       <div id="toasts" aria-live="polite">
-        {toasts.map((t) => (
-          <div key={t.id} className={t.kind === 'error' ? 'toast error' : 'toast'}>
-            {t.message}
+        {toasts.map((toast) => (
+          <div key={toast.id} className={toast.kind === ToastKind.ERROR ? 'toast error' : 'toast'}>
+            {toast.message}
           </div>
         ))}
       </div>
@@ -49,9 +38,9 @@ export function ToastProvider({ children }) {
   );
 }
 
-/** @returns {(message: string, kind?: 'info' | 'error') => void} */
+// Returns `showToast(message, kind?)`.
 export function useToast() {
-  const context = useContext(ToastContext);
-  if (!context) throw new Error('useToast must be used inside <ToastProvider>');
-  return context.toast;
+  const showToast = useContext(ToastContext);
+  if (!showToast) throw new Error('useToast must be used inside <ToastProvider>');
+  return showToast;
 }

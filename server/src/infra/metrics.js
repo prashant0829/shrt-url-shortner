@@ -1,9 +1,8 @@
 import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from '@prometheus-io/client';
 
-/**
- * Each app instance owns its registry (instead of the global one) so that several instances
- * can coexist in one process, which the integration tests rely on.
- */
+const HTTP_LATENCY_BUCKETS_SECONDS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5];
+
+// Each app instance owns its registry (not the global one) so several can coexist in one process.
 export function createMetrics() {
   const registry = new Registry();
   collectDefaultMetrics({ register: registry });
@@ -14,7 +13,7 @@ export function createMetrics() {
       name: 'http_request_duration_seconds',
       help: 'HTTP request latency in seconds',
       labelNames: ['method', 'route', 'status'],
-      buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5],
+      buckets: HTTP_LATENCY_BUCKETS_SECONDS,
       registers: [registry],
     }),
     redirects: new Counter({
@@ -43,17 +42,15 @@ export function createMetrics() {
   };
 }
 
-/** @typedef {ReturnType<typeof createMetrics>} Metrics */
-
-/** Exposes the click-stream backlog so operators can alert on a worker falling behind. */
+// Lets operators alert on a worker falling behind.
 export function registerStreamBacklogGauge(metrics, redis, streamKey) {
-  new Gauge({
+  const gauge = new Gauge({
     name: 'click_stream_length',
     help: 'Click events waiting in (or pending on) the Redis stream',
     registers: [metrics.registry],
     async collect() {
       try {
-        this.set(await redis.xlen(streamKey));
+        gauge.set(await redis.xlen(streamKey));
       } catch {
         // Redis is unreachable: leave the gauge unset rather than failing the whole scrape.
       }

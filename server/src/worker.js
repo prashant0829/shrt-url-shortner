@@ -1,34 +1,30 @@
 import { writeFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
-import { ConfigError, loadConfig } from './config/index.js';
+import { loadConfigOrExit } from './config/index.js';
 import { createPool } from './infra/database.js';
 import { createRedis } from './infra/redis.js';
-import { ClickConsumer } from './modules/analytics/click-consumer.js';
-import { ClickRepository } from './modules/analytics/click.repository.js';
-import { createLogger } from './shared/logger.js';
-import { installCrashHandlers, onShutdown } from './shared/lifecycle.js';
+import { createClickConsumer } from './queue/click-consumer.js';
+import { createClickRepository } from './repositories/click.repository.js';
+import { RedisConnectionRole } from './constants.js';
+import { installCrashHandlers, onShutdown } from './infra/lifecycle.js';
+import { createLogger } from './infra/logger.js';
 
-let config;
-try {
-  config = loadConfig();
-} catch (err) {
-  if (err instanceof ConfigError) {
-    console.error(err.message);
-    process.exit(1);
-  }
-  throw err;
-}
-
+const config = loadConfigOrExit();
 const logger = createLogger(config);
 installCrashHandlers(logger);
 
 const pool = createPool(config.db, logger);
-// A dedicated connection: XREADGROUP BLOCK holds it, so nothing else may share it.
-const redis = createRedis(config.redis.url, logger, 'blocking');
+// XREADGROUP BLOCK holds its connection while it waits, so nothing else may share it.
+const redis = createRedis(config.redis.url, logger, RedisConnectionRole.BLOCKING);
 
-const consumer = new ClickConsumer({
+const { heartbeatFile } = config.clicks;
+const writeHeartbeat = heartbeatFile
+  ? () => writeFile(heartbeatFile, String(Date.now()))
+  : undefined;
+
+const consumer = createClickConsumer({
   redis,
-  writer: new ClickRepository(pool),
+  writer: createClickRepository(pool),
   logger,
   options: {
     streamKey: config.clicks.streamKey,
@@ -38,23 +34,21 @@ const consumer = new ClickConsumer({
     blockMs: config.clicks.blockMs,
     reclaimIdleMs: config.clicks.reclaimIdleMs,
   },
-  heartbeat: config.clicks.heartbeatFile
-    ? () => writeFile(config.clicks.heartbeatFile, String(Date.now()))
-    : undefined,
+  heartbeat: writeHeartbeat,
 });
 
 logger.info(
   { stream: config.clicks.streamKey, group: config.clicks.consumerGroup },
   'click worker started',
 );
-const finished = consumer.run();
+const consumerStopped = consumer.run();
 
 onShutdown(logger, async () => {
   consumer.stop();
-  // Let the batch in progress finish so nothing is left half-processed.
-  await finished;
+  // Let the batch in progress finish, so nothing is left half-processed.
+  await consumerStopped;
   await pool.end();
   await redis.quit().catch(() => redis.disconnect());
 });
 
-await finished;
+await consumerStopped;

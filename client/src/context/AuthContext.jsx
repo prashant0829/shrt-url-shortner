@@ -1,59 +1,46 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { createApiClient } from '../api/client.js';
+import { AsyncStatus, TOKEN_STORAGE_KEY, ToastKind } from '../constants.js';
 import { useToast } from './ToastContext.jsx';
 
 const AuthContext = createContext(null);
 
-const TOKEN_KEY = 'shrt.token';
+// localStorage can be unavailable (private mode, blocked site data); then a session lasts for this
+// page view only.
+function tryStorage(action, fallback) {
+  try {
+    return action();
+  } catch {
+    return fallback;
+  }
+}
 
-/** localStorage can be unavailable (private mode, blocked site data): then a session lasts for this page view. */
 export const tokenStorage = {
-  get() {
-    try {
-      return localStorage.getItem(TOKEN_KEY);
-    } catch {
-      return null;
-    }
-  },
-  set(token) {
-    try {
-      localStorage.setItem(TOKEN_KEY, token);
-    } catch {
-      /* ignore */
-    }
-  },
-  clear() {
-    try {
-      localStorage.removeItem(TOKEN_KEY);
-    } catch {
-      /* ignore */
-    }
-  },
+  get: () => tryStorage(() => localStorage.getItem(TOKEN_STORAGE_KEY), null),
+  set: (token) => tryStorage(() => localStorage.setItem(TOKEN_STORAGE_KEY, token)),
+  clear: () => tryStorage(() => localStorage.removeItem(TOKEN_STORAGE_KEY)),
 };
 
-/** Holds the current token outside React state, so the API client can read the latest value on every request. */
+// Holds the current token outside React state, so the API client reads the latest value on every request.
 function createSessionStore(initialToken) {
   let token = initialToken;
   return {
     getToken: () => token,
-    setToken: (next) => {
-      token = next;
+    setToken: (nextToken) => {
+      token = nextToken;
     },
   };
 }
 
-/**
- * Owns the signed-in user and the API client (which reads the current token on every request).
- * On start it restores a saved session by asking the server who the token belongs to.
- *
- * @param {object} props
- * @param {typeof fetch} [props.fetchFn] Injected in tests.
- */
+// Owns the signed-in user and the API client. On start it restores a saved session by asking the
+// server who the saved token belongs to. `fetchFn` is injected in tests.
 export function AuthProvider({ children, fetchFn }) {
-  const toast = useToast();
+  const showToast = useToast();
   const [session] = useState(() => createSessionStore(tokenStorage.get()));
   const [user, setUser] = useState(null);
-  const [status, setStatus] = useState(() => (session.getToken() ? 'loading' : 'ready'));
+  const [status, setStatus] = useState(() =>
+    session.getToken() ? AsyncStatus.LOADING : AsyncStatus.READY,
+  );
 
   const applySession = useCallback(
     (token, nextUser) => {
@@ -68,9 +55,9 @@ export function AuthProvider({ children, fetchFn }) {
   const logout = useCallback(
     (message) => {
       applySession(null, null);
-      if (message) toast(message, 'error');
+      if (message) showToast(message, ToastKind.ERROR);
     },
-    [applySession, toast],
+    [applySession, showToast],
   );
 
   const api = useMemo(
@@ -83,36 +70,36 @@ export function AuthProvider({ children, fetchFn }) {
     [session, logout, fetchFn],
   );
 
-  // Restore a saved session.
   useEffect(() => {
     if (!session.getToken()) return undefined;
+
     const controller = new AbortController();
     api
       .me({ signal: controller.signal })
-      .then(({ user: me }) => {
-        if (!controller.signal.aborted) setUser(me);
+      .then(({ user: savedUser }) => {
+        if (!controller.signal.aborted) setUser(savedUser);
       })
       .catch(() => {
-        /* an invalid token has already signed the user out */
+        // An invalid token has already signed the user out.
       })
       .finally(() => {
-        if (!controller.signal.aborted) setStatus('ready');
+        if (!controller.signal.aborted) setStatus(AsyncStatus.READY);
       });
     return () => controller.abort();
   }, [api, session]);
 
   const login = useCallback(
     async (email, password) => {
-      const next = await api.login(email, password);
-      applySession(next.token, next.user);
+      const { token, user: signedInUser } = await api.login(email, password);
+      applySession(token, signedInUser);
     },
     [api, applySession],
   );
 
   const register = useCallback(
     async (email, password) => {
-      const next = await api.register(email, password);
-      applySession(next.token, next.user);
+      const { token, user: newUser } = await api.register(email, password);
+      applySession(token, newUser);
     },
     [api, applySession],
   );

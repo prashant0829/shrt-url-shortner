@@ -1,9 +1,14 @@
 import { useState } from 'react';
-import { describeError } from '../api/client.js';
+import { getErrorMessage } from '../api/client.js';
+import {
+  ANALYTICS_RANGES,
+  AnalyticsInterval,
+  AsyncStatus,
+  DEFAULT_ANALYTICS_RANGE,
+} from '../constants.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useAnalytics } from '../hooks/useAnalytics.js';
 import { stripProtocol } from '../lib/format.js';
-import { DEFAULT_RANGE, RANGES } from '../lib/ranges.js';
 import { BarChart } from './BarChart.jsx';
 import { Breakdown } from './Breakdown.jsx';
 import { Dialog } from './Dialog.jsx';
@@ -16,10 +21,7 @@ const BREAKDOWNS = [
   ['referrers', 'Referrers'],
 ];
 
-/**
- * Click analytics for one link.
- * @param {{link: object | null, onClose: () => void}} props `link` of `null` keeps the dialog closed.
- */
+// `link` is the link to show analytics for, or null to keep the dialog closed.
 export function AnalyticsDialog({ link, onClose }) {
   return (
     <Dialog open={link !== null} onClose={onClose} labelledBy="stats-title" wide>
@@ -30,7 +32,7 @@ export function AnalyticsDialog({ link, onClose }) {
 
 function AnalyticsContent({ link, onClose }) {
   const { api } = useAuth();
-  const [range, setRange] = useState(DEFAULT_RANGE);
+  const [range, setRange] = useState(DEFAULT_ANALYTICS_RANGE);
   const [includeBots, setIncludeBots] = useState(false);
   const { status, data: report, error } = useAnalytics(api, link.code, range, includeBots);
 
@@ -45,12 +47,12 @@ function AnalyticsContent({ link, onClose }) {
 
       <div className="stats-controls">
         <div className="segmented" role="group" aria-label="Time range">
-          {Object.entries(RANGES).map(([key, { label }]) => (
+          {Object.entries(ANALYTICS_RANGES).map(([rangeKey, { label }]) => (
             <button
-              key={key}
+              key={rangeKey}
               type="button"
-              aria-pressed={range === key}
-              onClick={() => setRange(key)}
+              aria-pressed={range === rangeKey}
+              onClick={() => setRange(rangeKey)}
             >
               {label}
             </button>
@@ -60,20 +62,20 @@ function AnalyticsContent({ link, onClose }) {
           <input
             type="checkbox"
             checked={includeBots}
-            onChange={(e) => setIncludeBots(e.target.checked)}
+            onChange={(event) => setIncludeBots(event.target.checked)}
           />
           Include bots
         </label>
       </div>
 
       <div aria-live="polite">
-        {status === 'loading' && <p className="muted">Loading…</p>}
-        {status === 'error' && (
+        {status === AsyncStatus.LOADING && <p className="muted">Loading…</p>}
+        {status === AsyncStatus.ERROR && (
           <p className="error" role="alert">
-            {describeError(error)}
+            {getErrorMessage(error)}
           </p>
         )}
-        {status === 'ready' && <Report report={report} />}
+        {status === AsyncStatus.READY && <Report report={report} />}
       </div>
     </>
   );
@@ -95,7 +97,7 @@ function Report({ report }) {
 
       <BarChart series={report.series} interval={report.range.interval} />
       <p className="muted chart-note">
-        {report.range.interval === 'day'
+        {report.range.interval === AnalyticsInterval.DAY
           ? 'Days are counted in UTC.'
           : 'Hours are shown in your local time.'}
       </p>

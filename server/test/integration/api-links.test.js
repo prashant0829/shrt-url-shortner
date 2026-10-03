@@ -35,17 +35,19 @@ describe('POST /api/v1/links', () => {
       expiresAt: null,
       clickCount: 0,
     });
-    const { rows } = await ctx.container.pool.query('SELECT user_id FROM links WHERE code = $1', [
-      link.code,
-    ]);
+    const { rows } = await ctx.dependencies.pool.query(
+      'SELECT user_id FROM links WHERE code = $1',
+      [link.code],
+    );
     expect(rows[0].user_id).toBeNull();
   });
 
   it('attaches the link to the signed-in user', async () => {
     const link = await createLink(ctx.app, alice.headers, { url: 'https://example.com' });
-    const { rows } = await ctx.container.pool.query('SELECT user_id FROM links WHERE code = $1', [
-      link.code,
-    ]);
+    const { rows } = await ctx.dependencies.pool.query(
+      'SELECT user_id FROM links WHERE code = $1',
+      [link.code],
+    );
     expect(rows[0].user_id).toBe(alice.userId);
   });
 
@@ -86,7 +88,7 @@ describe('POST /api/v1/links', () => {
 
     expect(res.statusCode).toBe(409);
     expect(res.json().error.code).toBe('ALIAS_TAKEN');
-    const { rows } = await ctx.container.pool.query(
+    const { rows } = await ctx.dependencies.pool.query(
       "SELECT original_url FROM links WHERE code = 'taken'",
     );
     expect(rows[0].original_url).toBe('https://original.example/');

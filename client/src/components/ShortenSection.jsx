@@ -1,60 +1,50 @@
 import { useState } from 'react';
-import { describeError } from '../api/client.js';
+import { getErrorMessage } from '../api/client.js';
+import { MAX_ALIAS_LENGTH, QR_PREVIEW_SIZE } from '../constants.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useLinksContext } from '../context/LinksContext.jsx';
-import { useToast } from '../context/ToastContext.jsx';
-import { copyText } from '../lib/clipboard.js';
+import { useCopyToClipboard } from '../hooks/useCopyToClipboard.js';
 
-/** The hero card: the creation form and, after a link is made, its short URL and QR code. */
+// The creation form and, after a link is made, its short URL and QR code.
 export function ShortenSection() {
   const { api, user } = useAuth();
   const links = useLinksContext();
-  const toast = useToast();
+  const copyToClipboard = useCopyToClipboard();
 
   const [url, setUrl] = useState('');
   const [alias, setAlias] = useState('');
-  const [expires, setExpires] = useState('');
+  const [expiresAt, setExpiresAt] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [created, setCreated] = useState(null);
+  const [createdLink, setCreatedLink] = useState(null);
 
   async function handleSubmit(event) {
     event.preventDefault();
     setError(null);
-    setCreated(null);
+    setCreatedLink(null);
     setBusy(true);
 
     const payload = { url: url.trim() };
     if (alias.trim()) payload.customAlias = alias.trim();
-    if (expires) payload.expiresAt = new Date(expires).toISOString();
+    if (expiresAt) payload.expiresAt = new Date(expiresAt).toISOString();
 
     try {
       const link = await api.createLink(payload);
-      setCreated(link);
+      setCreatedLink(link);
       // Start the next link from a clean form (an alias can only be used once).
       setUrl('');
       setAlias('');
-      setExpires('');
+      setExpiresAt('');
       if (user) {
-        // While a search filter is active the new link may not match it: reload instead.
+        // While a search filter is active the new link may not match it, so reload instead.
         if (links.query) links.refresh();
         else links.add(link);
       }
     } catch (err) {
-      setError(describeError(err));
+      setError(getErrorMessage(err));
     } finally {
       setBusy(false);
     }
-  }
-
-  async function handleCopy() {
-    const copied = await copyText(created.shortUrl);
-    toast(
-      copied
-        ? 'Copied to clipboard'
-        : 'Could not copy automatically. Select the link and copy it manually.',
-      copied ? 'info' : 'error',
-    );
   }
 
   return (
@@ -75,7 +65,7 @@ export function ShortenSection() {
             autoComplete="off"
             required
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
+            onChange={(event) => setUrl(event.target.value)}
           />
           <button className="btn primary" type="submit" disabled={busy}>
             Shorten
@@ -90,17 +80,17 @@ export function ShortenSection() {
               <input
                 placeholder="my-link"
                 autoComplete="off"
-                maxLength={32}
+                maxLength={MAX_ALIAS_LENGTH}
                 value={alias}
-                onChange={(e) => setAlias(e.target.value)}
+                onChange={(event) => setAlias(event.target.value)}
               />
             </label>
             <label>
               Expires
               <input
                 type="datetime-local"
-                value={expires}
-                onChange={(e) => setExpires(e.target.value)}
+                value={expiresAt}
+                onChange={(event) => setExpiresAt(event.target.value)}
               />
             </label>
           </div>
@@ -113,29 +103,33 @@ export function ShortenSection() {
         )}
       </form>
 
-      {created && (
+      {createdLink && (
         <div className="result">
           <img
-            src={api.qrUrl(created.code)}
-            alt={`QR code for ${created.shortUrl}`}
-            width="96"
-            height="96"
+            src={api.qrUrl(createdLink.code)}
+            alt={`QR code for ${createdLink.shortUrl}`}
+            width={QR_PREVIEW_SIZE}
+            height={QR_PREVIEW_SIZE}
           />
           <div className="result-main">
             <a
               className="short-url"
-              href={created.shortUrl}
+              href={createdLink.shortUrl}
               target="_blank"
               rel="noopener noreferrer"
             >
-              {created.shortUrl}
+              {createdLink.shortUrl}
             </a>
             <div className="muted">
               {user
                 ? 'Saved to your links.'
                 : 'Sign in next time to track clicks and manage your links.'}
             </div>
-            <button className="btn small copy" type="button" onClick={handleCopy}>
+            <button
+              className="btn small copy"
+              type="button"
+              onClick={() => copyToClipboard(createdLink.shortUrl)}
+            >
               Copy link
             </button>
           </div>

@@ -1,138 +1,122 @@
 import express from 'express';
 import swaggerUi from 'swagger-ui-express';
-import { createAuthMiddleware } from './http/middleware/auth.js';
-import { errorHandler, notFoundHandler } from './http/middleware/error-handler.js';
-import { httpMetrics } from './http/middleware/metrics.js';
-import { createLimiterFactory } from './http/middleware/rate-limit.js';
-import { requestContext } from './http/middleware/request-context.js';
-import { securityMiddleware } from './http/middleware/security.js';
-import { createUiRouter } from './http/middleware/ui.js';
-import { buildOpenApiDocument } from './http/openapi.js';
-import { createRouteKit, createRouteRegistry } from './http/route-kit.js';
-import { registerAnalyticsRoutes } from './modules/analytics/analytics.routes.js';
-import { registerAuthRoutes } from './modules/auth/auth.routes.js';
-import { registerHealthRoutes } from './modules/health/health.routes.js';
-import { registerLinkRoutes } from './modules/links/link.routes.js';
-import { registerRedirectRoutes } from './modules/redirect/redirect.routes.js';
+import { createAuthMiddleware } from './middleware/auth.middleware.js';
+import { errorHandler, notFoundHandler } from './middleware/error-handler.middleware.js';
+import { httpMetrics } from './middleware/metrics.middleware.js';
+import { createRateLimiterFactory } from './middleware/rate-limit.middleware.js';
+import { requestContext } from './middleware/request-context.middleware.js';
+import { securityMiddleware } from './middleware/security.middleware.js';
+import { createUiRouter } from './middleware/ui.middleware.js';
+import { buildOpenApiDocument } from './routes/openapi.js';
+import { createRouteRegistry, createRouterFactory } from './routes/router-factory.js';
+import { registerAnalyticsRoutes } from './routes/analytics.routes.js';
+import { registerAuthRoutes } from './routes/auth.routes.js';
+import { registerSystemRoutes } from './routes/system.routes.js';
+import { registerLinkRoutes } from './routes/link.routes.js';
+import { registerRedirectRoutes } from './routes/redirect.routes.js';
+import { ApiTag, Environment, HttpHeader, RateLimiterName, RoutePath } from './constants.js';
 
-const API_PREFIX = '/api/v1';
+const API_TITLE = 'URL Shortener API';
 
-const DOC_TAGS = [
-  { name: 'Auth', description: 'Accounts and access tokens' },
-  { name: 'Links', description: 'Create and manage short links' },
-  { name: 'Analytics', description: 'Click statistics for your links' },
-  { name: 'System', description: 'Health checks' },
+const OPENAPI_TAGS = [
+  { name: ApiTag.AUTH, description: 'Accounts and access tokens' },
+  { name: ApiTag.LINKS, description: 'Create and manage short links' },
+  { name: ApiTag.ANALYTICS, description: 'Click statistics for your links' },
+  { name: ApiTag.SYSTEM, description: 'Health checks' },
 ];
 
-/**
- * Assembles the Express application from an already-built container. Does not start listening.
- *
- * Express runs middleware in registration order, so the order below is deliberate: cross-cutting
- * concerns first, then system routes, the API, docs, the UI, and only then the catch-all
- * `/:code` redirect (which would otherwise swallow every single-segment path).
- *
- * @param {ReturnType<typeof import('./container.js').createContainer>} container
- * @returns {import('express').Express}
- */
-export function createApp(container) {
-  const { config, logger, redis, pool, metrics, tokens } = container;
-  const { rateLimit: limits } = config;
+// Builds the Express app; it does not start listening. Express runs middleware in the order it is
+// registered, so the order below is deliberate: cross-cutting middleware, system routes, the JSON
+// API, the docs and UI, and last the catch-all `/:code` redirect, which would otherwise swallow
+// every single-segment path.
+export function createApp(dependencies) {
+  const { config, logger, redis, metrics, tokenService, controllers } = dependencies;
+  const rateLimits = config.rateLimit;
   const app = express();
 
   app.disable('x-powered-by');
-  app.set('etag', false); // JSON responses are not revalidated; skip hashing every body
+  app.set('etag', false); // JSON responses are not revalidated, so do not hash every body
   app.enable('case sensitive routing'); // short codes are case-sensitive
-  // Hops of reverse proxy in front of the app: the client address is then taken from
-  // X-Forwarded-For counting from the right, so a client cannot spoof it. 0 = no proxy.
   app.set('trust proxy', config.server.trustProxyHops);
 
   app.use(requestContext(logger));
   app.use((_req, res, next) => {
-    // During shutdown, ask clients on keep-alive connections to reconnect (to another replica).
-    if (app.locals.shuttingDown) res.set('connection', 'close');
+    // While shutting down, ask clients on keep-alive connections to reconnect (to another replica).
+    if (app.locals.shuttingDown) res.set(HttpHeader.CONNECTION, 'close');
     next();
   });
   app.use(securityMiddleware({ corsOrigins: config.server.corsOrigins }));
   app.use(httpMetrics(metrics));
 
-  const registry = createRouteRegistry();
-  const createRouter = createRouteKit({ registry, auth: createAuthMiddleware(tokens) });
-  const limiter = createLimiterFactory({
+  const routeRegistry = createRouteRegistry();
+  const createRouter = createRouterFactory({
+    routeRegistry,
+    authMiddleware: createAuthMiddleware(tokenService),
+  });
+  const createRateLimiter = createRateLimiterFactory({
     redis,
-    enabled: limits.enabled,
+    enabled: rateLimits.enabled,
     logger,
-    validate: config.env !== 'test',
+    validate: config.env !== Environment.TEST,
   });
 
-  // Probes and metrics (not rate limited).
-  const system = createRouter();
-  registerHealthRoutes(system.route, { pool, redis });
-  system.route({
-    method: 'get',
-    path: '/metrics',
-    hidden: true, // scraped by Prometheus; the reverse proxy blocks it from the outside
-    handler: async (_req, res) => {
-      res.type(metrics.registry.contentType).send(await metrics.registry.metrics());
-    },
-  });
-  app.use(system.router);
+  // Health probes and metrics are not rate limited.
+  const systemRouter = createRouter();
+  registerSystemRoutes(systemRouter.route, { controller: controllers.system });
+  app.use(systemRouter.router);
 
-  // The JSON API.
-  const api = createRouter(API_PREFIX, {
-    defaultLimit: limiter({ name: 'api', perMinute: limits.apiPerMinute }),
-  });
-  registerAuthRoutes(api.route, {
-    authService: container.authService,
-    tokens,
-    limit: limiter({ name: 'auth', perMinute: limits.authPerMinute }),
-  });
-  registerLinkRoutes(api.route, {
-    links: container.linkService,
-    resolver: container.resolver,
-    baseUrl: config.server.baseUrl,
-    createLimit: limiter({
-      name: 'create-link',
-      // Anonymous callers get a smaller budget than signed-in users.
-      perMinute: (req) =>
-        req.auth?.user ? limits.createUserPerMinute : limits.createAnonPerMinute,
+  const apiRouter = createRouter(RoutePath.API_PREFIX, {
+    defaultRateLimiter: createRateLimiter({
+      name: RateLimiterName.API,
+      requestsPerMinute: rateLimits.apiPerMinute,
     }),
   });
-  registerAnalyticsRoutes(api.route, { analytics: container.analyticsService });
-  app.use(API_PREFIX, api.router);
-
-  // The redirect route is declared now so it appears in the docs, but mounted last (see below).
-  const redirect = createRouter();
-  registerRedirectRoutes(redirect.route, {
-    resolver: container.resolver,
-    tracker: container.tracker,
-    metrics,
-    countryHeader: config.clicks.countryHeader,
+  registerAuthRoutes(apiRouter.route, {
+    controller: controllers.auth,
+    rateLimiter: createRateLimiter({
+      name: RateLimiterName.AUTH,
+      requestsPerMinute: rateLimits.authPerMinute,
+    }),
   });
+  registerLinkRoutes(apiRouter.route, {
+    controller: controllers.link,
+    linkCreationRateLimiter: createRateLimiter({
+      name: RateLimiterName.CREATE_LINK,
+      // Anonymous callers get a smaller budget than signed-in users.
+      requestsPerMinute: (req) =>
+        req.auth?.user ? rateLimits.createUserPerMinute : rateLimits.createAnonPerMinute,
+    }),
+  });
+  registerAnalyticsRoutes(apiRouter.route, { controller: controllers.analytics });
+  app.use(RoutePath.API_PREFIX, apiRouter.router);
 
-  // OpenAPI document generated from the same declarations that drive validation.
-  const spec = buildOpenApiDocument({
+  // Declared now so it appears in the docs, but mounted last (see above).
+  const redirectRouter = createRouter();
+  registerRedirectRoutes(redirectRouter.route, { controller: controllers.redirect });
+
+  const openApiDocument = buildOpenApiDocument({
     info: {
-      title: 'URL Shortener API',
+      title: API_TITLE,
       description:
         'Create short links, manage them, and read click analytics. ' +
         'Short links themselves are served at `GET /{code}`.',
       version: '1.0.0',
     },
     servers: [{ url: config.server.baseUrl }],
-    tags: DOC_TAGS,
-    registry,
+    tags: OPENAPI_TAGS,
+    routeRegistry,
   });
-  app.get('/docs/json', (_req, res) => res.json(spec));
+  app.get(RoutePath.DOCS_JSON, (_req, res) => res.json(openApiDocument));
   app.use(
-    '/docs',
+    RoutePath.DOCS,
     swaggerUi.serve,
-    swaggerUi.setup(spec, { customSiteTitle: 'URL Shortener API' }),
+    swaggerUi.setup(openApiDocument, { customSiteTitle: API_TITLE }),
   );
 
-  const ui = createUiRouter({ webDir: config.server.webDir, logger });
-  if (ui) app.use(ui);
+  const uiRouter = createUiRouter({ webDir: config.server.webDir, logger });
+  if (uiRouter) app.use(uiRouter);
 
-  app.use(redirect.router);
+  app.use(redirectRouter.router);
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

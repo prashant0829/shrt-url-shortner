@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createMetrics } from '../../src/infra/metrics.js';
-import { LinkResolver } from '../../src/modules/redirect/link-resolver.js';
-import { toLinkTarget } from '../../src/modules/links/link.mapper.js';
-import { InMemoryLinkCache, InMemoryLinkStore, counterValue } from '../helpers/fakes.js';
+import { createLinkResolver } from '../../src/services/link-resolver.service.js';
+import { toRedirectTarget } from '../../src/cache/link.cache.js';
+import {
+  createInMemoryLinkCache,
+  createInMemoryLinkStore,
+  counterValue,
+} from '../helpers/fakes.js';
 
 const NOW = Date.parse('2026-06-01T12:00:00Z');
 
@@ -12,7 +16,7 @@ describe('LinkResolver', () => {
   let metrics;
 
   const resolver = (overrides = {}) =>
-    new LinkResolver({ links: store, cache: overrides.cache ?? cache, metrics, now: () => NOW });
+    createLinkResolver({ links: store, cache: overrides.cache ?? cache, metrics, now: () => NOW });
 
   const addLink = (code, patch = {}) =>
     store
@@ -28,8 +32,8 @@ describe('LinkResolver', () => {
       });
 
   beforeEach(() => {
-    store = new InMemoryLinkStore();
-    cache = new InMemoryLinkCache();
+    store = createInMemoryLinkStore();
+    cache = createInMemoryLinkCache();
     metrics = createMetrics();
   });
 
@@ -38,10 +42,10 @@ describe('LinkResolver', () => {
     const r = resolver();
 
     expect(await r.resolve('abc')).toMatchObject({
-      status: 'redirect',
+      outcome: 'redirect',
       target: { url: 'https://dest.test/abc' },
     });
-    expect(await r.resolve('abc')).toMatchObject({ status: 'redirect' });
+    expect(await r.resolve('abc')).toMatchObject({ outcome: 'redirect' });
 
     expect(store.findCalls).toBe(1);
     expect(await counterValue(metrics.cacheLookups, { result: 'miss' })).toBe(1);
@@ -51,8 +55,8 @@ describe('LinkResolver', () => {
   it('caches unknown codes so repeated probes never reach the database', async () => {
     const r = resolver();
 
-    expect(await r.resolve('nope')).toEqual({ status: 'not_found' });
-    expect(await r.resolve('nope')).toEqual({ status: 'not_found' });
+    expect(await r.resolve('nope')).toEqual({ outcome: 'not_found' });
+    expect(await r.resolve('nope')).toEqual({ outcome: 'not_found' });
 
     expect(store.findCalls).toBe(1);
     expect(cache.entries.get('nope')).toBeNull();
@@ -65,7 +69,7 @@ describe('LinkResolver', () => {
 
     const results = await Promise.all(Array.from({ length: 50 }, () => r.resolve('hot')));
 
-    expect(results.every((res) => res.status === 'redirect')).toBe(true);
+    expect(results.every((res) => res.outcome === 'redirect')).toBe(true);
     expect(store.findCalls).toBe(1);
   });
 
@@ -73,8 +77,8 @@ describe('LinkResolver', () => {
     await addLink('exp', { expiresAt: new Date(NOW - 1_000) });
     const r = resolver();
 
-    expect(await r.resolve('exp')).toEqual({ status: 'gone' });
-    expect(await r.resolve('exp')).toEqual({ status: 'gone' }); // served from cache, same answer
+    expect(await r.resolve('exp')).toEqual({ outcome: 'gone' });
+    expect(await r.resolve('exp')).toEqual({ outcome: 'gone' }); // served from cache, same answer
     expect(store.findCalls).toBe(1);
   });
 
@@ -87,20 +91,20 @@ describe('LinkResolver', () => {
     };
     cache.entries.set('soon', target);
 
-    expect((await resolver().resolve('soon')).status).toBe('redirect');
-    const later = new LinkResolver({ links: store, cache, metrics, now: () => NOW + 5_000 });
-    expect((await later.resolve('soon')).status).toBe('gone');
+    expect((await resolver().resolve('soon')).outcome).toBe('redirect');
+    const later = createLinkResolver({ links: store, cache, metrics, now: () => NOW + 5_000 });
+    expect((await later.resolve('soon')).outcome).toBe('gone');
   });
 
   it('reports disabled links as gone', async () => {
     await addLink('off', { isActive: false });
-    expect(await resolver().resolve('off')).toEqual({ status: 'gone' });
+    expect(await resolver().resolve('off')).toEqual({ outcome: 'gone' });
   });
 
   it('reports soft-deleted links as gone rather than not found', async () => {
     await addLink('deleted');
     await store.softDelete('deleted');
-    expect(await resolver().resolve('deleted')).toEqual({ status: 'gone' });
+    expect(await resolver().resolve('deleted')).toEqual({ outcome: 'gone' });
   });
 
   it('keeps working when the cache is unavailable', async () => {
@@ -112,14 +116,14 @@ describe('LinkResolver', () => {
     };
     const r = resolver({ cache: brokenCache });
 
-    expect((await r.resolve('abc')).status).toBe('redirect');
-    expect((await r.resolve('abc')).status).toBe('redirect');
+    expect((await r.resolve('abc')).outcome).toBe('redirect');
+    expect((await r.resolve('abc')).outcome).toBe('redirect');
     expect(store.findCalls).toBe(2); // every request falls through to the database
   });
 
   it('maps stored links to cacheable targets', async () => {
     const link = await addLink('map');
-    expect(link && toLinkTarget(link)).toEqual({
+    expect(link && toRedirectTarget(link)).toEqual({
       linkId: link?.id,
       url: 'https://dest.test/map',
       expiresAt: null,

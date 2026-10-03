@@ -13,6 +13,17 @@ export default defineConfig([
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'prefer-const': 'error',
       eqeqeq: ['error', 'always'],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ClassDeclaration',
+          message: 'Use a factory function (createX) instead of a class.',
+        },
+        {
+          selector: 'ClassExpression',
+          message: 'Use a factory function (createX) instead of a class.',
+        },
+      ],
     },
   },
   prettier,

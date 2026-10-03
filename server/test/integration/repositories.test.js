@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { ClickRepository } from '../../src/modules/analytics/click.repository.js';
-import { UserRepository } from '../../src/modules/auth/user.repository.js';
-import { LinkRepository } from '../../src/modules/links/link.repository.js';
+import { createClickRepository } from '../../src/repositories/click.repository.js';
+import { createUserRepository } from '../../src/repositories/user.repository.js';
+import { createLinkRepository } from '../../src/repositories/link.repository.js';
 import { createTestContext, resetState } from '../helpers/context.js';
 
 let ctx;
@@ -12,9 +12,9 @@ let users;
 
 beforeAll(async () => {
   ctx = await createTestContext();
-  links = new LinkRepository(ctx.container.pool);
-  clicks = new ClickRepository(ctx.container.pool);
-  users = new UserRepository(ctx.container.pool);
+  links = createLinkRepository(ctx.dependencies.pool);
+  clicks = createClickRepository(ctx.dependencies.pool);
+  users = createUserRepository(ctx.dependencies.pool);
 });
 afterAll(() => ctx.close());
 beforeEach(resetState);
@@ -193,7 +193,7 @@ describe('ClickRepository.insertBatch', () => {
 
     expect(inserted).toBe(3);
     expect((await links.findByCode('clk-1'))?.clickCount).toBe(2);
-    const { rows } = await ctx.container.pool.query('SELECT count(*)::int AS n FROM clicks');
+    const { rows } = await ctx.dependencies.pool.query('SELECT count(*)::int AS n FROM clicks');
     expect(rows[0].n).toBe(3);
   });
 
@@ -230,7 +230,7 @@ describe('ClickRepository.insertBatch', () => {
     await clicks.insertBatch([
       click(id, { country: null, browser: null, os: null, referrerHost: null }),
     ]);
-    const { rows } = await ctx.container.pool.query(
+    const { rows } = await ctx.dependencies.pool.query(
       'SELECT country, browser, os, referrer_host FROM clicks',
     );
     expect(rows[0]).toEqual({ country: null, browser: null, os: null, referrer_host: null });

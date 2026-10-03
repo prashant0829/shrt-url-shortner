@@ -77,7 +77,7 @@ describe('POST /api/v1/auth/register', () => {
 
   it('stores only a salted hash', async () => {
     await post('/api/v1/auth/register', { email: 'hash@example.com', password: 'a-good-password' });
-    const { rows } = await ctx.container.pool.query('SELECT password_hash FROM users');
+    const { rows } = await ctx.dependencies.pool.query('SELECT password_hash FROM users');
     expect(rows[0].password_hash).toMatch(/^scrypt\$/);
     expect(rows[0].password_hash).not.toContain('a-good-password');
   });
@@ -169,7 +169,7 @@ describe('GET /api/v1/auth/me and bearer token handling', () => {
 
   it('rejects a valid token whose account no longer exists', async () => {
     const user = await signUp(ctx.app);
-    await ctx.container.pool.query('DELETE FROM users');
+    await ctx.dependencies.pool.query('DELETE FROM users');
 
     const res = await me(user.headers);
     expect(res.statusCode).toBe(401);

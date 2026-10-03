@@ -1,19 +1,16 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-// Arbitrary constant: serialises concurrent runners (e.g. several containers starting together).
+// Any fixed number works: runners that start together take turns on the same advisory lock.
 const MIGRATION_LOCK_ID = 727_001;
 
-// Resolves to <project>/migrations from both src/infra (dev) and dist/infra (built).
 export const DEFAULT_MIGRATIONS_DIR = path.resolve(import.meta.dirname, '../../migrations');
 
-/**
- * Applies pending `NNN_name.sql` files in filename order, each inside its own transaction.
- * Returns the names of the migrations that were applied by this call.
- */
-export async function runMigrations(pool, dir = DEFAULT_MIGRATIONS_DIR) {
+// Applies the `NNN_name.sql` files that have not run yet, in order, each in its own transaction.
+// Returns the names of the migrations applied by this call.
+export async function runMigrations(pool, migrationsDir = DEFAULT_MIGRATIONS_DIR) {
   const client = await pool.connect();
-  const applied = [];
+  const newlyApplied = [];
 
   try {
     await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_ID]);
@@ -24,13 +21,13 @@ export async function runMigrations(pool, dir = DEFAULT_MIGRATIONS_DIR) {
       )`);
 
     const { rows } = await client.query('SELECT name FROM schema_migrations');
-    const done = new Set(rows.map((row) => row.name));
-    const files = (await readdir(dir)).filter((file) => file.endsWith('.sql')).sort();
+    const alreadyApplied = new Set(rows.map((row) => row.name));
+    const migrationFiles = (await readdir(migrationsDir)).filter((f) => f.endsWith('.sql')).sort();
 
-    for (const file of files) {
-      if (done.has(file)) continue;
+    for (const file of migrationFiles) {
+      if (alreadyApplied.has(file)) continue;
 
-      const sql = await readFile(path.join(dir, file), 'utf8');
+      const sql = await readFile(path.join(migrationsDir, file), 'utf8');
       try {
         await client.query('BEGIN');
         await client.query(sql);
@@ -40,9 +37,9 @@ export async function runMigrations(pool, dir = DEFAULT_MIGRATIONS_DIR) {
         await client.query('ROLLBACK');
         throw new Error(`Migration ${file} failed: ${err.message}`, { cause: err });
       }
-      applied.push(file);
+      newlyApplied.push(file);
     }
-    return applied;
+    return newlyApplied;
   } finally {
     await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_ID]).catch(() => undefined);
     client.release();

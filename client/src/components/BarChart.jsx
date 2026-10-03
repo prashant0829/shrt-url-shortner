@@ -1,16 +1,11 @@
+import { AnalyticsInterval } from '../constants.js';
 import { bucketLabel, pluralize } from '../lib/format.js';
 
 const WIDTH = 640;
 const HEIGHT = 170;
 const PAD = { top: 8, right: 8, bottom: 22, left: 34 };
 
-/**
- * Clicks per time bucket as an SVG bar chart (no chart library needed for one chart).
- *
- * @param {object} props
- * @param {{bucket: string, clicks: number}[]} props.series
- * @param {'hour' | 'day'} props.interval
- */
+// Clicks per time bucket as an SVG bar chart (one chart does not need a chart library).
 export function BarChart({ series, interval }) {
   const innerWidth = WIDTH - PAD.left - PAD.right;
   const innerHeight = HEIGHT - PAD.top - PAD.bottom;
@@ -26,7 +21,7 @@ export function BarChart({ series, interval }) {
       className="chart"
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
       role="img"
-      aria-label={`${pluralize(total, 'click')} over ${series.length} ${interval === 'hour' ? 'hours' : 'days'}`}
+      aria-label={`${pluralize(total, 'click')} over ${series.length} ${interval === AnalyticsInterval.HOUR ? 'hours' : 'days'}`}
     >
       <line x1={PAD.left} x2={WIDTH - PAD.right} y1={baseline} y2={baseline} />
       <text x={PAD.left - 6} y={PAD.top + 8} textAnchor="end">

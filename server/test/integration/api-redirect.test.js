@@ -29,13 +29,13 @@ const visit = (code, headers = {}, method = 'GET') =>
 const streamKey = () => ctx.config.clicks.streamKey;
 
 const queuedEvents = async () =>
-  (await ctx.container.redis.xrange(streamKey(), '-', '+')).map(([, fields]) =>
+  (await ctx.dependencies.redis.xrange(streamKey(), '-', '+')).map(([, fields]) =>
     JSON.parse(fields[1]),
   );
 
 /** Click tracking is fire-and-forget, so wait for the event to reach the stream. */
 const waitForQueued = (count) =>
-  vi.waitFor(async () => expect(await ctx.container.redis.xlen(streamKey())).toBe(count));
+  vi.waitFor(async () => expect(await ctx.dependencies.redis.xlen(streamKey())).toBe(count));
 
 const patch = (code, payload) =>
   ctx.app.inject({
@@ -93,11 +93,11 @@ describe('GET /:code', () => {
     expect((await visit(link.code)).statusCode).toBe(302);
 
     // Move the expiry into the past directly in the database, as if time had passed.
-    await ctx.container.pool.query(
+    await ctx.dependencies.pool.query(
       "UPDATE links SET expires_at = now() - interval '1 second' WHERE code = $1",
       [link.code],
     );
-    await ctx.container.redis.flushdb(); // drop the cached copy; expiry is also re-checked on cached copies
+    await ctx.dependencies.redis.flushdb(); // drop the cached copy; expiry is also re-checked on cached copies
 
     const res = await visit(link.code);
     expect(res.statusCode).toBe(410);
@@ -142,17 +142,17 @@ describe('caching', () => {
     const { code } = await createLink(ctx.app, owner.headers, {
       url: 'https://example.com/cached',
     });
-    const cached = await ctx.container.redis.get(`link:${code}`);
+    const cached = await ctx.dependencies.redis.get(`link:${code}`);
     expect(JSON.parse(cached ?? 'null')).toMatchObject({
       url: 'https://example.com/cached',
       isActive: true,
     });
 
     // Remove the row behind the cache's back: only a cache hit can still answer.
-    await ctx.container.pool.query('DELETE FROM links WHERE code = $1', [code]);
+    await ctx.dependencies.pool.query('DELETE FROM links WHERE code = $1', [code]);
     expect((await visit(code)).statusCode).toBe(302);
 
-    await ctx.container.redis.del(`link:${code}`);
+    await ctx.dependencies.redis.del(`link:${code}`);
     expect((await visit(code)).statusCode).toBe(404);
   });
 
@@ -162,7 +162,7 @@ describe('caching', () => {
       const { code } = await createLink(ctx.app, owner.headers, {
         url: `https://example.com/${i}`,
       });
-      const ttl = await ctx.container.redis.ttl(`link:${code}`);
+      const ttl = await ctx.dependencies.redis.ttl(`link:${code}`);
       expect(ttl).toBeGreaterThanOrEqual(3_599); // 3600s default, minus a second of test latency
       expect(ttl).toBeLessThanOrEqual(3_960); // 3600s + 10%
       ttls.add(ttl);
@@ -172,8 +172,8 @@ describe('caching', () => {
 
   it('remembers unknown codes briefly so probing does not hit the database', async () => {
     expect((await visit('probe-me')).statusCode).toBe(404);
-    expect(await ctx.container.redis.get('link:probe-me')).toBe('null');
-    expect(await ctx.container.redis.ttl('link:probe-me')).toBeLessThanOrEqual(60);
+    expect(await ctx.dependencies.redis.get('link:probe-me')).toBe('null');
+    expect(await ctx.dependencies.redis.ttl('link:probe-me')).toBeLessThanOrEqual(60);
   });
 
   it('lets a freshly created alias take over a code that was recently probed', async () => {
@@ -188,14 +188,14 @@ describe('caching', () => {
 
   it('never caches malformed codes', async () => {
     await visit('bad.code');
-    expect(await ctx.container.redis.keys('link:*')).toEqual([]);
+    expect(await ctx.dependencies.redis.keys('link:*')).toEqual([]);
   });
 });
 
 describe('click capture', () => {
   it('queues one event per visit with the request details', async () => {
     const { code } = await createLink(ctx.app, owner.headers, { url: 'https://example.com' });
-    const link = await ctx.container.pool.query('SELECT id FROM links WHERE code = $1', [code]);
+    const link = await ctx.dependencies.pool.query('SELECT id FROM links WHERE code = $1', [code]);
 
     await visit(code, {
       'user-agent': CHROME,
@@ -224,7 +224,7 @@ describe('click capture', () => {
     await visit(code);
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    expect(await ctx.container.redis.xlen(streamKey())).toBe(0);
+    expect(await ctx.dependencies.redis.xlen(streamKey())).toBe(0);
   });
 
   it('turns queued clicks into counts once the worker has run', async () => {
@@ -234,7 +234,7 @@ describe('click capture', () => {
     await visit(code, { 'user-agent': 'curl/8.4.0' }); // automation: stored, but not counted
     await waitForQueued(3);
 
-    expect(await drainClicks(ctx.container)).toBe(3);
+    expect(await drainClicks(ctx.dependencies)).toBe(3);
 
     const link = (
       await ctx.app.inject({ method: 'GET', url: `/api/v1/links/${code}`, headers: owner.headers })

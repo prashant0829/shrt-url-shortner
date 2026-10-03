@@ -7,7 +7,8 @@
 import { randomUUID } from 'node:crypto';
 import { Redis } from 'ioredis';
 import pg from 'pg';
-import { EVENT_FIELD, clickEventSchema } from '../src/modules/analytics/click-events.js';
+import { clickEventSchema } from '../src/schemas/click-event.schemas.js';
+import { CLICK_EVENT_FIELD, ONE_DAY_MS } from '../src/constants.js';
 
 const [code, countArg = '200', daysArg = '14'] = process.argv.slice(2);
 const { DATABASE_URL, REDIS_URL, CLICK_STREAM_KEY = 'clicks' } = process.env;
@@ -60,7 +61,7 @@ try {
   const pipeline = redis.pipeline();
   for (let i = 0; i < count; i++) {
     // Squaring the random number skews clicks towards recent days, like a real campaign.
-    const ageMs = Math.floor(Math.random() ** 1.6 * days * 86_400_000);
+    const ageMs = Math.floor(Math.random() ** 1.6 * days * ONE_DAY_MS);
     const event = clickEventSchema.parse({
       eventId: randomUUID(),
       linkId,
@@ -70,7 +71,7 @@ try {
       referrer: pick(REFERRERS),
       country: pick(COUNTRIES),
     });
-    pipeline.xadd(CLICK_STREAM_KEY, '*', EVENT_FIELD, JSON.stringify(event));
+    pipeline.xadd(CLICK_STREAM_KEY, '*', CLICK_EVENT_FIELD, JSON.stringify(event));
   }
   await pipeline.exec();
   console.log(

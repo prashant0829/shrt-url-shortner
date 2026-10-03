@@ -23,12 +23,23 @@ export default [
     },
     settings: { react: { version: 'detect' } },
     rules: {
-      // React 19 ignores propTypes at runtime; components are documented with JSDoc and covered by tests.
+      // React 19 ignores propTypes at runtime, and the components are covered by tests.
       'react/prop-types': 'off',
       // User-controlled text (URLs, aliases) must never be injected as HTML.
       'react/no-danger': 'error',
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       eqeqeq: ['error', 'always'],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ClassDeclaration',
+          message: 'Use a factory function (createX) instead of a class.',
+        },
+        {
+          selector: 'ClassExpression',
+          message: 'Use a factory function (createX) instead of a class.',
+        },
+      ],
     },
   },
   {

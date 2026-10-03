@@ -1,4 +1,4 @@
-/** Copies text to the clipboard. Resolves `false` (never throws) if the browser refuses. */
+// Resolves false (never throws) if the browser refuses.
 export async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);

@@ -1,34 +1,30 @@
 import pg from 'pg';
+import { SERVICE_NAME } from '../constants.js';
 
 const { Pool, types } = pg;
 
-/** pg_type OID of BIGINT / int8. */
-const INT8_OID = 20;
+const BIGINT_TYPE_OID = 20;
+const IDLE_CLIENT_TIMEOUT_MS = 30_000;
+const CONNECT_TIMEOUT_MS = 5_000;
+const STATEMENT_TIMEOUT_MS = 10_000;
 
-/**
- * Postgres returns BIGINT (ids, counters, count(*)) as strings. Ours stay far below 2^53,
- * so they are parsed as numbers for this pool only, without touching global parser state.
- */
-function getTypeParser(oid, format) {
-  if (oid === INT8_OID) return (value) => Number(value);
-  return types.getTypeParser(oid, format);
-}
-
-const customTypes = {
-  getTypeParser: getTypeParser,
+// Postgres returns BIGINT (ids, counters, count(*)) as strings. Ours stay far below 2^53, so this
+// pool parses them as numbers without touching pg's global parsers.
+const typeParsers = {
+  getTypeParser: (oid, format) =>
+    oid === BIGINT_TYPE_OID ? (value) => Number(value) : types.getTypeParser(oid, format),
 };
 
-export function createPool(config, logger) {
+export function createPool({ url, poolMax }, logger) {
   const pool = new Pool({
-    connectionString: config.url,
-    max: config.poolMax,
-    idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 5_000,
-    // Guards the pool against a runaway analytics query.
-    statement_timeout: 10_000,
-    application_name: 'url-shortener',
+    connectionString: url,
+    max: poolMax,
+    idleTimeoutMillis: IDLE_CLIENT_TIMEOUT_MS,
+    connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+    statement_timeout: STATEMENT_TIMEOUT_MS,
+    application_name: SERVICE_NAME,
     options: '-c timezone=UTC',
-    types: customTypes,
+    types: typeParsers,
   });
 
   // Without a listener, an error on an idle client would crash the process.

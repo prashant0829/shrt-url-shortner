@@ -1,51 +1,40 @@
 import { useState } from 'react';
-import { describeError } from '../api/client.js';
+import { getErrorMessage } from '../api/client.js';
+import { AsyncStatus, ToastKind } from '../constants.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useLinksContext } from '../context/LinksContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
-import { copyText } from '../lib/clipboard.js';
+import { useCopyToClipboard } from '../hooks/useCopyToClipboard.js';
 import { ConfirmDialog } from './ConfirmDialog.jsx';
 import { LinkRow } from './LinkRow.jsx';
 
-/**
- * The signed-in user's links: search, copy, enable/disable, delete (with confirmation), paging.
- * @param {{onOpenAnalytics: (link: object) => void}} props
- */
+// The signed-in user's links: search, copy, enable/disable, delete (with confirmation) and paging.
 export function LinksSection({ onOpenAnalytics }) {
   const { api } = useAuth();
-  const toast = useToast();
+  const showToast = useToast();
   const links = useLinksContext();
-  const [pendingDelete, setPendingDelete] = useState(null);
+  const copyToClipboard = useCopyToClipboard();
+  const [linkPendingDelete, setLinkPendingDelete] = useState(null);
 
-  async function copy(link) {
-    const copied = await copyText(link.shortUrl);
-    toast(
-      copied
-        ? 'Copied to clipboard'
-        : 'Could not copy automatically. Select the link and copy it manually.',
-      copied ? 'info' : 'error',
-    );
-  }
-
-  async function toggle(link) {
+  async function toggleActive(link) {
     try {
       const updated = await api.updateLink(link.code, { isActive: !link.isActive });
       links.replace(updated);
-      toast(updated.isActive ? 'Link enabled' : 'Link disabled');
+      showToast(updated.isActive ? 'Link enabled' : 'Link disabled');
     } catch (err) {
-      toast(describeError(err), 'error');
+      showToast(getErrorMessage(err), ToastKind.ERROR);
     }
   }
 
   async function confirmDelete() {
-    const link = pendingDelete;
-    setPendingDelete(null);
+    const link = linkPendingDelete;
+    setLinkPendingDelete(null);
     try {
       await api.deleteLink(link.code);
       links.remove(link.code);
-      toast('Link deleted');
+      showToast('Link deleted');
     } catch (err) {
-      toast(describeError(err), 'error');
+      showToast(getErrorMessage(err), ToastKind.ERROR);
     }
   }
 
@@ -53,11 +42,11 @@ export function LinksSection({ onOpenAnalytics }) {
     try {
       await links.loadMore();
     } catch (err) {
-      toast(describeError(err), 'error');
+      showToast(getErrorMessage(err), ToastKind.ERROR);
     }
   }
 
-  const isEmpty = links.status === 'ready' && links.items.length === 0;
+  const isEmpty = links.status === AsyncStatus.READY && links.items.length === 0;
 
   return (
     <section className="card" aria-labelledby="links-title">
@@ -68,28 +57,28 @@ export function LinksSection({ onOpenAnalytics }) {
           placeholder="Search links"
           aria-label="Search links"
           value={links.searchText}
-          onChange={(e) => links.setSearchText(e.target.value)}
+          onChange={(event) => links.setSearchText(event.target.value)}
         />
       </div>
 
-      {links.status === 'error' && (
+      {links.status === AsyncStatus.ERROR && (
         <p className="error" role="alert">
-          {describeError(links.error)}{' '}
+          {getErrorMessage(links.error)}{' '}
           <button className="btn small" type="button" onClick={links.refresh}>
             Retry
           </button>
         </p>
       )}
 
-      <div className="links" aria-busy={links.status === 'loading'}>
+      <div className="links" aria-busy={links.status === AsyncStatus.LOADING}>
         {links.items.map((link) => (
           <LinkRow
             key={link.code}
             link={link}
-            onCopy={copy}
+            onCopy={(copiedLink) => copyToClipboard(copiedLink.shortUrl)}
             onAnalytics={onOpenAnalytics}
-            onToggle={toggle}
-            onDelete={setPendingDelete}
+            onToggle={toggleActive}
+            onDelete={setLinkPendingDelete}
           />
         ))}
       </div>
@@ -115,16 +104,16 @@ export function LinksSection({ onOpenAnalytics }) {
       )}
 
       <ConfirmDialog
-        open={pendingDelete !== null}
+        open={linkPendingDelete !== null}
         title="Delete this link?"
         message={
-          pendingDelete
-            ? `${pendingDelete.shortUrl} will stop working. The address stays reserved and cannot be reused.`
+          linkPendingDelete
+            ? `${linkPendingDelete.shortUrl} will stop working. The address stays reserved and cannot be reused.`
             : ''
         }
         confirmLabel="Delete"
         onConfirm={confirmDelete}
-        onCancel={() => setPendingDelete(null)}
+        onCancel={() => setLinkPendingDelete(null)}
       />
     </section>
   );

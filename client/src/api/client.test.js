@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApiError, createApiClient, describeError } from './client.js';
+import { createApiClient, createApiError, getErrorMessage, isApiError } from './client.js';
 
 const json = (status, body) =>
   new Response(body === undefined ? null : JSON.stringify(body), {
@@ -70,7 +70,7 @@ describe('createApiClient', () => {
 
     const error = await client.createLink({ url: '' }).catch((e) => e);
 
-    expect(error).toBeInstanceOf(ApiError);
+    expect(isApiError(error)).toBe(true);
     expect(error).toMatchObject({
       status: 400,
       code: 'VALIDATION_ERROR',
@@ -180,9 +180,9 @@ describe('createApiClient', () => {
   });
 });
 
-describe('describeError', () => {
+describe('getErrorMessage', () => {
   it('lists validation problems with their field names', () => {
-    const error = new ApiError(400, {
+    const error = createApiError(400, {
       error: {
         code: 'VALIDATION_ERROR',
         message: 'Request validation failed',
@@ -192,14 +192,14 @@ describe('describeError', () => {
         ],
       },
     });
-    expect(describeError(error)).toBe('url: Too small. Invalid input');
+    expect(getErrorMessage(error)).toBe('url: Too small. Invalid input');
   });
 
   it('uses the message of other errors and has a fallback for unknown values', () => {
     expect(
-      describeError(new ApiError(409, { error: { code: 'ALIAS_TAKEN', message: 'Taken' } })),
+      getErrorMessage(createApiError(409, { error: { code: 'ALIAS_TAKEN', message: 'Taken' } })),
     ).toBe('Taken');
-    expect(describeError(new Error('Network down'))).toBe('Network down');
-    expect(describeError('weird')).toBe('Something went wrong');
+    expect(getErrorMessage(new Error('Network down'))).toBe('Network down');
+    expect(getErrorMessage('weird')).toBe('Something went wrong');
   });
 });

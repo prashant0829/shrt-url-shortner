@@ -1,17 +1,11 @@
 import { useState } from 'react';
-import { describeError } from '../api/client.js';
+import { getErrorMessage } from '../api/client.js';
+import { AuthMode, MIN_PASSWORD_LENGTH } from '../constants.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { Dialog } from './Dialog.jsx';
 
-/**
- * Sign in / create account.
- *
- * @param {object} props
- * @param {'login' | 'register' | null} props.mode `null` keeps the dialog closed.
- * @param {(mode: 'login' | 'register') => void} props.onModeChange
- * @param {() => void} props.onClose
- */
+// `mode` is an `AuthMode` value, or null to keep the dialog closed.
 export function AuthDialog({ mode, onModeChange, onClose }) {
   return (
     <Dialog open={mode !== null} onClose={onClose} labelledBy="auth-title">
@@ -22,12 +16,12 @@ export function AuthDialog({ mode, onModeChange, onClose }) {
 
 function AuthForm({ mode, onModeChange, onClose }) {
   const { login, register } = useAuth();
-  const toast = useToast();
+  const showToast = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const isLogin = mode === 'login';
+  const isLogin = mode === AuthMode.LOGIN;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -35,10 +29,10 @@ function AuthForm({ mode, onModeChange, onClose }) {
     setError(null);
     try {
       await (isLogin ? login : register)(email, password);
-      toast(isLogin ? 'Signed in' : 'Account created');
+      showToast(isLogin ? 'Signed in' : 'Account created');
       onClose();
     } catch (err) {
-      setError(describeError(err));
+      setError(getErrorMessage(err));
       setBusy(false);
     }
   }
@@ -53,7 +47,7 @@ function AuthForm({ mode, onModeChange, onClose }) {
           autoComplete="email"
           required
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(event) => setEmail(event.target.value)}
         />
       </label>
       <label>
@@ -61,10 +55,10 @@ function AuthForm({ mode, onModeChange, onClose }) {
         <input
           type="password"
           autoComplete={isLogin ? 'current-password' : 'new-password'}
-          minLength={8}
+          minLength={MIN_PASSWORD_LENGTH}
           required
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(event) => setPassword(event.target.value)}
         />
       </label>
       {error && (
@@ -76,7 +70,7 @@ function AuthForm({ mode, onModeChange, onClose }) {
         <button
           className="btn link"
           type="button"
-          onClick={() => onModeChange(isLogin ? 'register' : 'login')}
+          onClick={() => onModeChange(isLogin ? AuthMode.REGISTER : AuthMode.LOGIN)}
         >
           {isLogin ? 'Need an account? Sign up' : 'Have an account? Sign in'}
         </button>

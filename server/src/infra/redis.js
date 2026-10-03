@@ -1,29 +1,25 @@
 import { Redis } from 'ioredis';
+import { RedisConnectionRole } from '../constants.js';
 
-/**
- * Fail fast instead of queueing commands during an outage: cache and rate-limiter callers
- * degrade gracefully, and requests never hang waiting for Redis to come back.
- */
-const requestScoped = {
+const CONNECT_TIMEOUT_MS = 5_000;
+const COMMAND_TIMEOUT_MS = 1_000;
+
+// Fail fast during an outage: the cache and rate limiter degrade gracefully and requests never hang.
+const requestOptions = {
   maxRetriesPerRequest: 1,
-  connectTimeout: 5_000,
-  commandTimeout: 1_000,
+  connectTimeout: CONNECT_TIMEOUT_MS,
+  commandTimeout: COMMAND_TIMEOUT_MS,
 };
 
-/** Blocking reads (XREADGROUP BLOCK) must not be cut short by a command timeout. */
-const blockingScoped = {
+// XREADGROUP BLOCK waits for new entries, so a command timeout would cut it short.
+const blockingOptions = {
   maxRetriesPerRequest: null,
-  connectTimeout: 5_000,
+  connectTimeout: CONNECT_TIMEOUT_MS,
 };
 
-/**
- * @param {string} url
- * @param {import('pino').Logger} logger
- * @param {'request' | 'blocking'} [role] `blocking` is for the worker's XREADGROUP BLOCK reads.
- * @returns {Redis}
- */
-export function createRedis(url, logger, role = 'request') {
-  const client = new Redis(url, role === 'request' ? requestScoped : blockingScoped);
+export function createRedis(url, logger, role = RedisConnectionRole.REQUEST) {
+  const options = role === RedisConnectionRole.REQUEST ? requestOptions : blockingOptions;
+  const client = new Redis(url, options);
   client.on('error', (err) => logger.error({ err }, 'redis connection error'));
   return client;
 }

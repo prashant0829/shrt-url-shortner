@@ -34,7 +34,7 @@ const click = (code, headers, remoteAddress) =>
 
 const waitForQueued = (count) =>
   vi.waitFor(async () =>
-    expect(await ctx.container.redis.xlen(ctx.config.clicks.streamKey)).toBe(count),
+    expect(await ctx.dependencies.redis.xlen(ctx.config.clicks.streamKey)).toBe(count),
   );
 
 describe('GET /api/v1/links/:code/analytics', () => {
@@ -62,7 +62,7 @@ describe('GET /api/v1/links/:code/analytics', () => {
     );
     await click(code, { 'user-agent': GOOGLEBOT }, '66.249.66.1');
     await waitForQueued(4);
-    await drainClicks(ctx.container);
+    await drainClicks(ctx.dependencies);
 
     const res = await analytics(code);
     expect(res.statusCode).toBe(200);
@@ -122,7 +122,7 @@ describe('GET /api/v1/links/:code/analytics', () => {
     await click(code, { 'user-agent': CHROME_WIN }, '203.0.113.10');
     await click(code, { 'user-agent': GOOGLEBOT }, '66.249.66.1');
     await waitForQueued(2);
-    await drainClicks(ctx.container);
+    await drainClicks(ctx.dependencies);
 
     expect((await analytics(code, '?includeBots=true')).json().totals.clicks).toBe(2);
     expect((await analytics(code, '?includeBots=false')).json().totals.clicks).toBe(1);

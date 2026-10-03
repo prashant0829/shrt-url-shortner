@@ -1,10 +1,4 @@
-/**
- * A ranked list with proportional bars (e.g. top countries).
- *
- * @param {object} props
- * @param {string} props.title
- * @param {{label: string, clicks: number}[]} props.entries
- */
+// A ranked list with proportional bars, such as the top countries.
 export function Breakdown({ title, entries }) {
   const top = Math.max(1, ...entries.map((entry) => entry.clicks));
 

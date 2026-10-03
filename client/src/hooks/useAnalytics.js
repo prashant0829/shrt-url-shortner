@@ -1,16 +1,10 @@
-import { RANGES } from '../lib/ranges.js';
+import { ANALYTICS_RANGES } from '../constants.js';
 import { useAsync } from './useAsync.js';
 
-/**
- * Loads the analytics report for one link over a preset range.
- * @param {ReturnType<typeof import('../api/client.js').createApiClient>} api
- * @param {string} code
- * @param {keyof typeof RANGES} range
- * @param {boolean} includeBots
- */
+// Loads the analytics report for one link over a preset time range.
 export function useAnalytics(api, code, range, includeBots) {
   return useAsync((signal) => {
-    const { interval, ms } = RANGES[range];
+    const { interval, ms } = ANALYTICS_RANGES[range];
     const to = new Date();
     return api.getAnalytics(
       code,

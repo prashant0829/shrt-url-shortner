@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ConfigError, loadConfig } from '../../src/config/index.js';
-import { decodeCursor, encodeCursor } from '../../src/modules/links/pagination.js';
-import { SingleFlight } from '../../src/shared/single-flight.js';
+import { loadConfig } from '../../src/config/index.js';
+import { decodeCursor, encodeCursor } from '../../src/utils/pagination.js';
+import { createSingleFlight } from '../../src/utils/single-flight.js';
 
 const REQUIRED_ENV = {
   DATABASE_URL: 'postgres://u:p@localhost:5432/db',
@@ -53,7 +53,9 @@ describe('loadConfig', () => {
   });
 
   it('fails fast and lists every problem', () => {
-    expect(() => loadConfig({ JWT_SECRET: 'short' })).toThrow(ConfigError);
+    expect(() => loadConfig({ JWT_SECRET: 'short' })).toThrow(
+      expect.objectContaining({ name: 'ConfigError' }),
+    );
     try {
       loadConfig({ JWT_SECRET: 'short', PORT: '99999' });
     } catch (err) {
@@ -65,7 +67,9 @@ describe('loadConfig', () => {
   });
 
   it('rejects non-http BASE_URL values', () => {
-    expect(() => loadConfig({ ...REQUIRED_ENV, BASE_URL: 'ftp://sho.rt' })).toThrow(ConfigError);
+    expect(() => loadConfig({ ...REQUIRED_ENV, BASE_URL: 'ftp://sho.rt' })).toThrow(
+      expect.objectContaining({ name: 'ConfigError' }),
+    );
   });
 });
 
@@ -86,7 +90,7 @@ describe('cursor pagination helpers', () => {
 
 describe('SingleFlight', () => {
   it('runs one task for concurrent callers with the same key', async () => {
-    const flight = new SingleFlight();
+    const flight = createSingleFlight();
     let runs = 0;
     const task = async () => {
       runs += 1;
@@ -105,7 +109,7 @@ describe('SingleFlight', () => {
   });
 
   it('does not share work across different keys', async () => {
-    const flight = new SingleFlight();
+    const flight = createSingleFlight();
     const [a, b] = await Promise.all([
       flight.run('a', async () => 'A'),
       flight.run('b', async () => 'B'),
@@ -114,7 +118,7 @@ describe('SingleFlight', () => {
   });
 
   it('runs again once the previous call has settled', async () => {
-    const flight = new SingleFlight();
+    const flight = createSingleFlight();
     let runs = 0;
     const task = async () => ++runs;
 
@@ -124,7 +128,7 @@ describe('SingleFlight', () => {
   });
 
   it('propagates failures to every waiter and then recovers', async () => {
-    const flight = new SingleFlight();
+    const flight = createSingleFlight();
     const failing = async () => {
       throw new Error('boom');
     };

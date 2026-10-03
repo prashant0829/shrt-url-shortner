@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AuthService } from '../../src/modules/auth/auth.service.js';
-import { ScryptPasswordHasher } from '../../src/modules/auth/password-hasher.js';
-import { TokenService } from '../../src/modules/auth/token-service.js';
-import { InMemoryUserStore } from '../helpers/fakes.js';
+import { createAuthService } from '../../src/services/auth.service.js';
+import { createScryptPasswordHasher } from '../../src/services/password-hasher.service.js';
+import { createTokenService } from '../../src/services/token.service.js';
+import { createInMemoryUserStore } from '../helpers/fakes.js';
 
 // Cheap parameters keep the suite fast; the production defaults are covered by the format test.
-const fastHasher = new ScryptPasswordHasher({ N: 1024, r: 8, p: 1 });
+const fastHasher = createScryptPasswordHasher({ N: 1024, r: 8, p: 1 });
 
 describe('ScryptPasswordHasher', () => {
   it('verifies the right password and rejects a wrong one', async () => {
@@ -23,11 +23,11 @@ describe('ScryptPasswordHasher', () => {
     const hash = await fastHasher.hash('pw');
     expect(hash).toMatch(/^scrypt\$1024\$8\$1\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$/);
     // A hasher configured with different parameters still verifies it.
-    expect(await new ScryptPasswordHasher({ N: 2048 }).verify('pw', hash)).toBe(true);
+    expect(await createScryptPasswordHasher({ N: 2048 }).verify('pw', hash)).toBe(true);
   });
 
   it('uses OWASP-grade parameters by default', async () => {
-    const hash = await new ScryptPasswordHasher().hash('pw');
+    const hash = await createScryptPasswordHasher().hash('pw');
     expect(hash.startsWith(`scrypt$${2 ** 15}$8$3$`)).toBe(true);
   });
 
@@ -40,7 +40,7 @@ describe('ScryptPasswordHasher', () => {
 });
 
 describe('TokenService', () => {
-  const service = new TokenService({ secret: 'x'.repeat(40), ttlSeconds: 60 });
+  const service = createTokenService({ secret: 'x'.repeat(40), ttlSeconds: 60 });
 
   afterEach(() => vi.useRealTimers());
 
@@ -51,7 +51,7 @@ describe('TokenService', () => {
   });
 
   it('rejects tokens signed with another secret', async () => {
-    const other = new TokenService({ secret: 'y'.repeat(40), ttlSeconds: 60 });
+    const other = createTokenService({ secret: 'y'.repeat(40), ttlSeconds: 60 });
     const { token } = await other.issue('user-1');
     await expect(service.verify(token)).rejects.toMatchObject({ code: 'INVALID_TOKEN' });
   });
@@ -87,10 +87,10 @@ describe('TokenService', () => {
 
 describe('AuthService', () => {
   const build = () => {
-    const users = new InMemoryUserStore();
-    const hasher = new ScryptPasswordHasher({ N: 1024, r: 8, p: 1 });
+    const users = createInMemoryUserStore();
+    const hasher = createScryptPasswordHasher({ N: 1024, r: 8, p: 1 });
     const verify = vi.spyOn(hasher, 'verify');
-    return { service: new AuthService({ users, hasher }), users, verify };
+    return { service: createAuthService({ users, hasher }), users, verify };
   };
 
   it('registers a user and never stores the plain password', async () => {

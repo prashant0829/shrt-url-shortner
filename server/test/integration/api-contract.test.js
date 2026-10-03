@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { analyticsView } from '../../src/modules/analytics/analytics.schemas.js';
-import { authResponse, meResponse } from '../../src/modules/auth/auth.schemas.js';
-import { linkListView, linkView } from '../../src/modules/links/link.schemas.js';
-import { errorResponse } from '../../src/shared/http-schemas.js';
+import { analyticsView } from '../../src/schemas/analytics.schemas.js';
+import { authResponse, meResponse } from '../../src/schemas/auth.schemas.js';
+import { linkListView, linkView } from '../../src/schemas/link.schemas.js';
+import { errorResponse } from '../../src/schemas/error.schemas.js';
 import { createLink, createTestContext, resetState, signUp } from '../helpers/context.js';
 
 /**

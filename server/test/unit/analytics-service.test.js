@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AnalyticsService } from '../../src/modules/analytics/analytics.service.js';
-import { InMemoryLinkStore } from '../helpers/fakes.js';
+import { createAnalyticsService } from '../../src/services/analytics.service.js';
+import { createInMemoryLinkStore } from '../helpers/fakes.js';
 
 const NOW = new Date('2026-06-15T12:00:00Z');
 const DAY = 86_400_000;
@@ -17,7 +17,7 @@ describe('AnalyticsService', () => {
   let service;
 
   beforeEach(async () => {
-    store = new InMemoryLinkStore();
+    store = createInMemoryLinkStore();
     await store.insert({
       code: 'mine',
       originalUrl: 'https://a.test/',
@@ -25,7 +25,7 @@ describe('AnalyticsService', () => {
       expiresAt: null,
     });
     getReport = vi.fn(async () => EMPTY_REPORT);
-    service = new AnalyticsService({ links: store, clicks: { getReport }, now: () => NOW });
+    service = createAnalyticsService({ links: store, clicks: { getReport }, now: () => NOW });
   });
 
   it('defaults to the last 7 days in day buckets', async () => {

@@ -1,20 +1,13 @@
 import { useEffect, useRef } from 'react';
 
-/**
- * A modal built on the native `<dialog>` element, which gives focus trapping, Escape to close and
- * a backdrop for free. `children` are only rendered while open, so their state resets every time.
- *
- * @param {object} props
- * @param {boolean} props.open
- * @param {() => void} props.onClose Called when the dialog closes (Escape, or a programmatic close).
- * @param {string} props.labelledBy id of the element that names the dialog.
- * @param {boolean} [props.wide]
- */
+// A modal built on the native `<dialog>` element, which gives focus trapping, Escape to close and a
+// backdrop for free. `children` render only while open, so their state resets every time.
+// `labelledBy` is the id of the element that names the dialog.
 export function Dialog({ open, onClose, labelledBy, wide = false, children }) {
-  const ref = useRef(null);
+  const dialogRef = useRef(null);
 
   useEffect(() => {
-    const dialog = ref.current;
+    const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) dialog.showModal();
     if (!open && dialog.open) dialog.close();
@@ -22,7 +15,7 @@ export function Dialog({ open, onClose, labelledBy, wide = false, children }) {
 
   return (
     <dialog
-      ref={ref}
+      ref={dialogRef}
       className={wide ? 'wide' : undefined}
       aria-labelledby={labelledBy}
       onClose={onClose}

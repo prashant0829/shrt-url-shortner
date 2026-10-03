@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useEffectEvent, useReducer, useState } from 'react';
+import { AsyncStatus, LINKS_PAGE_SIZE } from '../constants.js';
 
-const PAGE_SIZE = 20;
-const INITIAL = { key: null, items: [], nextCursor: null, error: null, loadingMore: false };
+const Action = Object.freeze({
+  LOADED: 'loaded',
+  FAILED: 'failed',
+  LOADING_MORE: 'loading-more',
+  LOADING_MORE_FAILED: 'loading-more-failed',
+  APPENDED: 'appended',
+  ADDED: 'added',
+  REPLACED: 'replaced',
+  REMOVED: 'removed',
+});
+
+const INITIAL_STATE = { key: null, items: [], nextCursor: null, error: null, loadingMore: false };
 
 function reducer(state, action) {
   switch (action.type) {
-    case 'loaded':
+    case Action.LOADED:
       return {
         key: action.key,
         items: action.page.items,
@@ -13,13 +24,13 @@ function reducer(state, action) {
         error: null,
         loadingMore: false,
       };
-    case 'failed':
+    case Action.FAILED:
       return { ...state, key: action.key, error: action.error, loadingMore: false };
-    case 'loading-more':
+    case Action.LOADING_MORE:
       return { ...state, loadingMore: true };
-    case 'loading-more-failed':
+    case Action.LOADING_MORE_FAILED:
       return { ...state, loadingMore: false };
-    case 'appended':
+    case Action.APPENDED:
       // Ignore a page that belongs to a search the user has already moved on from.
       return action.key === state.key
         ? {
@@ -29,45 +40,41 @@ function reducer(state, action) {
             loadingMore: false,
           }
         : state;
-    case 'added':
+    case Action.ADDED:
       return { ...state, items: [action.link, ...state.items] };
-    case 'replaced':
+    case Action.REPLACED:
       return {
         ...state,
         items: state.items.map((link) => (link.code === action.link.code ? action.link : link)),
       };
-    case 'removed':
+    case Action.REMOVED:
       return { ...state, items: state.items.filter((link) => link.code !== action.code) };
     default:
       return state;
   }
 }
 
-/**
- * The signed-in user's links: first page, "load more", and local edits that mirror what the API did.
- *
- * @param {ReturnType<typeof import('../api/client.js').createApiClient>} api
- * @param {boolean} enabled False while signed out (the list is then empty and nothing is fetched).
- * @param {string} query The search text to filter by.
- */
+// The signed-in user's links: the first page, "load more", and local edits that mirror what the
+// API did. `enabled` is false while signed out (nothing is fetched); `query` is the search text.
 export function useLinks(api, enabled, query) {
-  const [state, dispatch] = useReducer(reducer, INITIAL);
-  const [version, setVersion] = useState(0);
-  const key = `${query}|${version}`;
+  const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
+  const [reloadCount, setReloadCount] = useState(0);
+  const key = `${query}|${reloadCount}`;
 
   const loadFirstPage = useEffectEvent((signal) =>
-    api.listLinks({ limit: PAGE_SIZE, q: query }, { signal }),
+    api.listLinks({ limit: LINKS_PAGE_SIZE, q: query }, { signal }),
   );
 
   useEffect(() => {
     if (!enabled) return undefined;
+
     const controller = new AbortController();
     loadFirstPage(controller.signal).then(
       (page) => {
-        if (!controller.signal.aborted) dispatch({ type: 'loaded', key, page });
+        if (!controller.signal.aborted) dispatch({ type: Action.LOADED, key, page });
       },
       (error) => {
-        if (!controller.signal.aborted) dispatch({ type: 'failed', key, error });
+        if (!controller.signal.aborted) dispatch({ type: Action.FAILED, key, error });
       },
     );
     return () => controller.abort();
@@ -75,32 +82,37 @@ export function useLinks(api, enabled, query) {
 
   const loadMore = useCallback(async () => {
     if (!state.nextCursor || state.loadingMore) return;
+
     const requestKey = state.key;
-    dispatch({ type: 'loading-more' });
+    dispatch({ type: Action.LOADING_MORE });
     try {
-      const page = await api.listLinks({ limit: PAGE_SIZE, cursor: state.nextCursor, q: query });
-      dispatch({ type: 'appended', key: requestKey, page });
+      const page = await api.listLinks({
+        limit: LINKS_PAGE_SIZE,
+        cursor: state.nextCursor,
+        q: query,
+      });
+      dispatch({ type: Action.APPENDED, key: requestKey, page });
     } catch (error) {
-      dispatch({ type: 'loading-more-failed' });
+      dispatch({ type: Action.LOADING_MORE_FAILED });
       throw error;
     }
   }, [api, query, state.key, state.nextCursor, state.loadingMore]);
 
-  const refresh = useCallback(() => setVersion((v) => v + 1), []);
-  const add = useCallback((link) => dispatch({ type: 'added', link }), []);
-  const replace = useCallback((link) => dispatch({ type: 'replaced', link }), []);
-  const remove = useCallback((code) => dispatch({ type: 'removed', code }), []);
+  const refresh = useCallback(() => setReloadCount((count) => count + 1), []);
+  const add = useCallback((link) => dispatch({ type: Action.ADDED, link }), []);
+  const replace = useCallback((link) => dispatch({ type: Action.REPLACED, link }), []);
+  const remove = useCallback((code) => dispatch({ type: Action.REMOVED, code }), []);
 
-  const settled = enabled && state.key === key;
-  let status = 'ready';
-  if (!enabled) status = 'idle';
-  else if (!settled) status = 'loading';
-  else if (state.error) status = 'error';
+  const hasSettled = enabled && state.key === key;
+  let status = AsyncStatus.READY;
+  if (!enabled) status = AsyncStatus.IDLE;
+  else if (!hasSettled) status = AsyncStatus.LOADING;
+  else if (state.error) status = AsyncStatus.ERROR;
 
   return {
     items: enabled ? state.items : [],
     status,
-    error: settled ? state.error : null,
+    error: hasSettled ? state.error : null,
     hasMore: enabled && state.nextCursor !== null,
     loadingMore: state.loadingMore,
     loadMore,
